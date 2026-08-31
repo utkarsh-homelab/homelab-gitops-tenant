@@ -6,7 +6,7 @@ GitOps repository for tenant's applications.
 
 ```
 apps/
-└── iresharma/    # Iresh's applications
+└── example-nginx.yaml/    # example application
 ```
 
 ## Allowed Namespaces
@@ -15,7 +15,7 @@ apps/
 
 ## How to Deploy
 
-1. Add your application manifests to the appropriate namespace directory
+1. Add your application manifests to the app directory
 2. Push to the `main` branch
 3. ArgoCD will automatically sync the changes
 
