@@ -129,6 +129,10 @@ metadata:
   namespace: iresharma
   labels:
     app: otel-collector
+  annotations:
+    # Wait for clickhouse (wave 0, default) and the schema-migrator Job
+    # (wave 1) to go Healthy first - see apps/signoz-migrator.yaml.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   selector:
