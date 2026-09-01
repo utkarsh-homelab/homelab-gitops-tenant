@@ -21,9 +21,10 @@ spec:
         - name: lens-distill
           # NOTE: 1.0.0 was built against @neondatabase/serverless (Neon's
           # HTTP/WS proxy protocol) and will NOT connect to the plain
-          # postgres deployed in lens-distill-postgres.yaml. Bump this once
-          # a build using drizzle-orm/node-postgres is pushed.
-          image: iresharma/lens-distill:1.1.0
+          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 (breaking:
+          # drizzle-orm/node-postgres driver swap) is the placeholder tag
+          # this points at until that build is actually pushed.
+          image: iresharma/lens-distill:2.0.0
           ports:
             - containerPort: 3000
           env:
