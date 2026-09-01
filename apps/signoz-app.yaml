@@ -211,7 +211,8 @@ spec:
       containers:
         - name: query-service
           image: signoz/query-service:0.69.0
-          command:
+          # `args`, not `command` - see apps/signoz-migrator.yaml for why.
+          args:
             - "-config=/root/config/prometheus.yml"
             - "--use-logs-new-schema=true"
             - "--use-trace-new-schema=true"
