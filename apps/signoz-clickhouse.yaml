@@ -1417,27 +1417,25 @@ spec:
       labels:
         app: zookeeper-1
     spec:
-      # bitnami's entrypoint needs to chown /bitnami/zookeeper on a fresh PVC;
-      # matches `user: root` in SigNoz's own reference docker-compose.
-      securityContext:
-        runAsUser: 0
       containers:
+        # Bitnami pulled almost every tag (including 3.7.1) from the free
+        # bitnami/zookeeper repo, breaking any deployment pinned to one - so
+        # this uses the official Apache-maintained image instead, which
+        # doesn't carry that vendor risk. In standalone mode (the default,
+        # ZOO_STANDALONE_ENABLED=true) it needs no env vars at all, and it
+        # runs with open/anonymous access by default - no auth config needed.
         - name: zookeeper
-          image: bitnami/zookeeper:3.7.1
+          image: zookeeper:3.9.3
           ports:
             - containerPort: 2181
             - containerPort: 2888
             - containerPort: 3888
-          env:
-            - name: ZOO_SERVER_ID
-              value: "1"
-            - name: ALLOW_ANONYMOUS_LOGIN
-              value: "yes"
-            - name: ZOO_AUTOPURGE_INTERVAL
-              value: "1"
           volumeMounts:
+            # Only /data (snapshots) is persisted; /datalog (transaction
+            # logs) is left on the container's ephemeral filesystem - fine
+            # for a single-node homelab coordination service.
             - name: data
-              mountPath: /bitnami/zookeeper
+              mountPath: /data
           resources:
             requests:
               memory: 128Mi
