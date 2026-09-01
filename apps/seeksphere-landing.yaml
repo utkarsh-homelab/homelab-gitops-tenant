@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: landing
-          image: iresharma/seeksphere-landing:latest
+          image: iresharma/seeksphere-landing:1.0.0
           ports:
             - containerPort: 3000
           resources:
