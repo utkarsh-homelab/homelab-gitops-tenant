@@ -190,9 +190,15 @@ data:
              (the server may be connected to multiple networks via multiple addresses)
           -->
 
-        <!--
-        <interserver_http_host>example.clickhouse.com</interserver_http_host>
+        <!-- Unset, this defaults to `hostname -f` - the pod's random
+             ReplicaSet-generated name, which never matches cluster.xml's
+             <host>clickhouse</host> entry. ClickHouse then can never
+             recognize itself as local (is_local=0 in system.clusters),
+             and every `ON CLUSTER` DDL statement (which the schema-migrator
+             relies on) hangs waiting on ZooKeeper for a "remote" host that
+             is actually itself, until it times out.
         -->
+        <interserver_http_host>clickhouse</interserver_http_host>
 
         <!-- You can specify credentials for authenthication between replicas.
              This is required when interserver_https_port is accessible from untrusted networks,
@@ -1563,6 +1569,24 @@ metadata:
   name: clickhouse
   namespace: iresharma
 spec:
+  # Headless: cluster.xml's <replica><host>clickhouse</host></replica> needs
+  # this name to resolve to the pod's real IP. With a normal ClusterIP,
+  # ClickHouse resolves its own cluster entry to that virtual IP, doesn't
+  # recognize it as itself (is_local=0 in system.clusters), and every
+  # `ON CLUSTER` DDL statement (which the schema-migrator relies on) then
+  # waits on ZooKeeper for a "remote" host that never reports back until it
+  # times out after distributed_ddl_task_timeout (180s).
+  clusterIP: None
+  # A headless Service only publishes DNS records for pods that have
+  # already passed their readiness probe - but this pod's own readiness
+  # probe can't pass until well after its process has started, which is
+  # also when it resolves this same name to determine its own cluster
+  # identity. Without this, that resolution deterministically fails every
+  # time (not a race - the pod is always NotReady at that point), and
+  # ClickHouse permanently caches itself as not-local for the process's
+  # lifetime. This publishes the record as soon as the pod has an IP,
+  # before any container even starts.
+  publishNotReadyAddresses: true
   selector:
     app: clickhouse
   ports:
@@ -1575,4 +1599,3 @@ spec:
     - name: interserver
       port: 9009
       targetPort: 9009
-  type: ClusterIP
