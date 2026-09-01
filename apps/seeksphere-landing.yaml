@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seeksphere-landing
+  namespace: iresharma
+  labels:
+    app: seeksphere-landing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seeksphere-landing
+  template:
+    metadata:
+      labels:
+        app: seeksphere-landing
+    spec:
+      containers:
+        - name: landing
+          image: iresharma/seeksphere-landing:latest
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seeksphere-landing
+  namespace: iresharma
+spec:
+  selector:
+    app: seeksphere-landing
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: seeksphere-landing
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: landing.seeksphere.uttutu.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: seeksphere-landing
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - landing.seeksphere.uttutu.xyz
+      secretName: seeksphere-landing-tls
