@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lens-distill-postgres-init
+  namespace: iresharma
+data:
+  # Runs once, only on a fresh (empty) data dir - the official postgres
+  # entrypoint scripts every *.sql file in docker-entrypoint-initdb.d/ on
+  # first init and never again, so this is safe to leave in place forever.
+  01-pgvector.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lens-distill-postgres-data
+  namespace: iresharma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # lens-distill caps ingestion at 3 books/week site-wide with per-book
+      # size guards (see its README), so this stays small on purpose.
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lens-distill-postgres
+  namespace: iresharma
+  labels:
+    app: lens-distill-postgres
+spec:
+  replicas: 1
+  # RWO + a single replica: a new pod must not start before the old one
+  # releases the volume, which RollingUpdate does not guarantee.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lens-distill-postgres
+  template:
+    metadata:
+      labels:
+        app: lens-distill-postgres
+    spec:
+      containers:
+        - name: postgres
+          # pgvector's official image - plain postgres plus the `vector`
+          # extension lens-distill's schema (drizzle `vector()` columns,
+          # HNSW neighbor search) requires.
+          image: pgvector/pgvector:pg16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: lensdistill
+            - name: POSTGRES_DB
+              value: lensdistill
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lens-distill-secrets
+                  key: POSTGRES_PASSWORD
+            # Without this, postgres puts its data files directly at the
+            # mount root, where a CSI driver's lost+found directory can
+            # already exist and trip initdb's "directory not empty" check.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "lensdistill", "-d", "lensdistill"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "lensdistill", "-d", "lensdistill"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 50m
+            limits:
+              memory: 768Mi
+              cpu: 500m
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lens-distill-postgres-data
+        - name: init
+          configMap:
+            name: lens-distill-postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lens-distill-postgres
+  namespace: iresharma
+spec:
+  selector:
+    app: lens-distill-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
