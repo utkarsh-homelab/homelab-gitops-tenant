@@ -54,7 +54,7 @@ spec:
             runAsUser: 0
       containers:
         - name: variable-bitrate-server
-          image: iresharma/variable-bitrate-server:1.0.0
+          image: iresharma/variable-bitrate-server:1.0.2
           ports:
             - containerPort: 8080
           env:
@@ -111,13 +111,37 @@ kind: Service
 metadata:
   name: variable-bitrate-server
   namespace: iresharma
+  labels:
+    app: variable-bitrate-server
 spec:
   selector:
     app: variable-bitrate-server
   ports:
-    - port: 80
+    # Named so the ServiceMonitor below can target it by name rather than
+    # number.
+    - name: http
+      port: 80
       targetPort: 8080
   type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: variable-bitrate-server
+  namespace: iresharma
+  labels:
+    app: variable-bitrate-server
+spec:
+  selector:
+    matchLabels:
+      app: variable-bitrate-server
+  endpoints:
+    # App exposes prom-client metrics (hls_server_* namespace) on GET /metrics,
+    # same port as the HTTP API - see src/metrics.js and src/index.js in the
+    # Variable-bitrate-Live-streamin-server repo.
+    - port: http
+      path: /metrics
+      interval: 30s
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
