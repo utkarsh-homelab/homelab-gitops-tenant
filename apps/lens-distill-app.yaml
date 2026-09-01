@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lens-distill
+  namespace: iresharma
+  labels:
+    app: lens-distill
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: lens-distill
+  template:
+    metadata:
+      labels:
+        app: lens-distill
+    spec:
+      containers:
+        - name: lens-distill
+          # NOTE: 1.0.0 was built against @neondatabase/serverless (Neon's
+          # HTTP/WS proxy protocol) and will NOT connect to the plain
+          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 (breaking:
+          # drizzle-orm/node-postgres driver swap) is the placeholder tag
+          # this points at until that build is actually pushed.
+          image: iresharma/lens-distill:2.0.0
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lens-distill-secrets
+                  key: DATABASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lens-distill-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lens-distill-secrets
+                  key: OPENROUTER_API_KEY
+            # In-cluster SigNoz collector - see apps/signoz-otel-collector.yaml
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.iresharma.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "lens-distill"
+            - name: OTEL_SERVICE_NAMESPACE
+              value: "lens-distill"
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: "production"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 50m
+            limits:
+              memory: 1Gi
+              cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lens-distill
+  namespace: iresharma
+spec:
+  selector:
+    app: lens-distill
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lens-distill
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: lens-distill.tenant.uttutu.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lens-distill
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - lens-distill.tenant.uttutu.xyz
+      secretName: lens-distill-tls
