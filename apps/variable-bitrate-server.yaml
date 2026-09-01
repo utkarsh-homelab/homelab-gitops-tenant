@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: variable-bitrate-server-data
+  namespace: iresharma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: variable-bitrate-server
+  namespace: iresharma
+  labels:
+    app: variable-bitrate-server
+spec:
+  replicas: 1
+  # RWO + a single replica: a new pod must not start before the old one
+  # releases the volume, which RollingUpdate does not guarantee.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: variable-bitrate-server
+  template:
+    metadata:
+      labels:
+        app: variable-bitrate-server
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        # Some CSI drivers don't apply fsGroup to a volume's subPath
+        # directories on first creation, so this creates them and fixes
+        # ownership up front rather than relying on that.
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data/uploadedVideos /data/hls-Streams /data/MPEG-DASH-Streams /data/db
+              chown -R 1000:1000 /data
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            runAsUser: 0
+      containers:
+        - name: variable-bitrate-server
+          image: iresharma/variable-bitrate-server:1.0.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            # Baked into every HLS/DASH manifest URL the server generates -
+            # must match the Ingress host below.
+            - name: HOST
+              value: "https://vbr.tenant.uttutu.xyz"
+          volumeMounts:
+            - name: data
+              mountPath: /app/src/uploadedVideos
+              subPath: uploadedVideos
+            - name: data
+              mountPath: /app/src/hls-Streams
+              subPath: hls-Streams
+            - name: data
+              mountPath: /app/src/MPEG-DASH-Streams
+              subPath: MPEG-DASH-Streams
+            - name: data
+              mountPath: /app/src/db
+              subPath: db
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 200m
+            limits:
+              memory: 1Gi
+              cpu: "2"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: variable-bitrate-server-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: variable-bitrate-server
+  namespace: iresharma
+spec:
+  selector:
+    app: variable-bitrate-server
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: variable-bitrate-server
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: vbr.tenant.uttutu.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: variable-bitrate-server
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - vbr.tenant.uttutu.xyz
+      secretName: variable-bitrate-server-tls
