@@ -136,6 +136,10 @@ metadata:
   namespace: iresharma
   labels:
     app: alertmanager
+  annotations:
+    # Wait for clickhouse (wave 0, default) and the schema-migrator Job
+    # (wave 1) to go Healthy first - see apps/signoz-migrator.yaml.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   selector:
@@ -190,6 +194,8 @@ metadata:
   namespace: iresharma
   labels:
     app: query-service
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   strategy:
@@ -290,6 +296,8 @@ metadata:
   namespace: iresharma
   labels:
     app: frontend
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   selector:

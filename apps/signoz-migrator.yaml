@@ -4,12 +4,15 @@ metadata:
   name: signoz-schema-migrator
   namespace: iresharma
   annotations:
-    # Runs to completion before ArgoCD applies the rest of the sync (so
-    # query-service/otel-collector never start against a ClickHouse with no
-    # schema yet). Re-running sync/async against an already-migrated schema
-    # is a no-op, so this is safe to repeat on every sync.
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # A PreSync hook would run before ClickHouse/ZooKeeper themselves are
+    # applied (they're normal resources in this same app), so the
+    # wait-for-clickhouse init container would deadlock waiting for a
+    # ClickHouse that doesn't exist yet. Sync waves instead let clickhouse's
+    # own wave (0, the default) go Healthy first, then run this Job, then
+    # bring up query-service/otel-collector/frontend in a later wave.
+    # Re-running sync/async against an already-migrated schema is a no-op,
+    # so this is safe to repeat on every sync.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   backoffLimit: 3
   template:
