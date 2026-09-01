@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: signoz-schema-migrator
+  namespace: iresharma
+  annotations:
+    # Runs to completion before ArgoCD applies the rest of the sync (so
+    # query-service/otel-collector never start against a ClickHouse with no
+    # schema yet). Re-running sync/async against an already-migrated schema
+    # is a no-op, so this is safe to repeat on every sync.
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-clickhouse
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until wget -q -T 3 -O- http://clickhouse:8123/ping; do
+                echo "waiting for clickhouse..."
+                sleep 5
+              done
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+        - name: schema-migrator-sync
+          image: signoz/signoz-schema-migrator:0.111.24
+          command:
+            - sync
+            - "--dsn=tcp://clickhouse:9000"
+            - "--up="
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+      containers:
+        - name: schema-migrator-async
+          image: signoz/signoz-schema-migrator:0.111.24
+          command:
+            - async
+            - "--dsn=tcp://clickhouse:9000"
+            - "--up="
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
