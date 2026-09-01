@@ -45,17 +45,6 @@ spec:
                 secretKeyRef:
                   name: lens-distill-secrets
                   key: OPENROUTER_API_KEY
-            # In-cluster SigNoz collector - see apps/signoz-otel-collector.yaml
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://otel-collector.iresharma.svc.cluster.local:4318"
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: "http/protobuf"
-            - name: OTEL_SERVICE_NAME
-              value: "lens-distill"
-            - name: OTEL_SERVICE_NAMESPACE
-              value: "lens-distill"
-            - name: OTEL_DEPLOYMENT_ENVIRONMENT
-              value: "production"
           readinessProbe:
             httpGet:
               path: /
