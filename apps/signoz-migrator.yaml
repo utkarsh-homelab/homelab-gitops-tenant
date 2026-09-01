@@ -38,7 +38,12 @@ spec:
               cpu: 100m
         - name: schema-migrator-sync
           image: signoz/signoz-schema-migrator:0.111.24
-          command:
+          # `args`, not `command`: unlike docker-compose's `command:` (which
+          # appends to the image's ENTRYPOINT), Kubernetes' `command:`
+          # replaces it outright - which turned "sync" into busybox's
+          # unrelated `sync` coreutil instead of a subcommand of this
+          # image's actual entrypoint binary.
+          args:
             - sync
             - "--dsn=tcp://clickhouse:9000"
             - "--up="
@@ -52,7 +57,7 @@ spec:
       containers:
         - name: schema-migrator-async
           image: signoz/signoz-schema-migrator:0.111.24
-          command:
+          args:
             - async
             - "--dsn=tcp://clickhouse:9000"
             - "--up="

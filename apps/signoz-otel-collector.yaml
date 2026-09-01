@@ -146,7 +146,11 @@ spec:
       containers:
         - name: otel-collector
           image: signoz/signoz-otel-collector:0.111.24
-          command:
+          # `args`, not `command` - see apps/signoz-migrator.yaml for why:
+          # Kubernetes' `command:` replaces the image's ENTRYPOINT (the
+          # otelcol binary) instead of appending to it like docker-compose's
+          # `command:` does.
+          args:
             - "--config=/etc/otel-collector-config.yaml"
             - "--feature-gates=-pkg.translator.prometheus.NormalizeName"
           env:
