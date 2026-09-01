@@ -83,7 +83,8 @@ spec:
               cpu: 200m
             limits:
               memory: 1Gi
-              cpu: "2"
+              # The tenant namespace's LimitRange caps a single container at 1 cpu.
+              cpu: "1"
           readinessProbe:
             httpGet:
               path: /
