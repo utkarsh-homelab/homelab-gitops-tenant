@@ -204,6 +204,80 @@ data:
           "targets": [{ "expr": "kube_limitrange{namespace=\"iresharma\"}", "format": "table", "instant": true, "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
           "options": { "showHeader": true }
+        },
+
+        { "id": 40, "type": "row", "title": "Network Usage", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 } },
+        {
+          "id": 41, "type": "stat", "title": "Total Receive Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 45 },
+          "targets": [{ "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "receive", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 42, "type": "stat", "title": "Total Transmit Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 45 },
+          "targets": [{ "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "transmit", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 43, "type": "stat", "title": "Total Received (selected range)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 45 },
+          "targets": [{ "expr": "sum(increase(container_network_receive_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__range]))", "legendFormat": "received", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 44, "type": "stat", "title": "Total Transmitted (selected range)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 45 },
+          "targets": [{ "expr": "sum(increase(container_network_transmit_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__range]))", "legendFormat": "transmitted", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 45, "type": "timeseries", "title": "Total Network Rate (Receive/Transmit)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 49 },
+          "targets": [
+            { "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "receive", "refId": "A" },
+            { "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "transmit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+        },
+        {
+          "id": 46, "type": "timeseries", "title": "Network Receive Rate by Pod",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+          "targets": [{ "expr": "sum by (pod) (rate(container_network_receive_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "{{pod}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+        },
+        {
+          "id": 47, "type": "timeseries", "title": "Network Transmit Rate by Pod",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+          "targets": [{ "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__rate_interval]))", "legendFormat": "{{pod}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+        },
+        {
+          "id": 48, "type": "table", "title": "Cumulative Bytes Received by Pod (selected range)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 65 },
+          "targets": [{ "expr": "sum by (pod) (increase(container_network_receive_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__range]))", "format": "table", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "showHeader": true }
+        },
+        {
+          "id": 49, "type": "table", "title": "Cumulative Bytes Transmitted by Pod (selected range)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 65 },
+          "targets": [{ "expr": "sum by (pod) (increase(container_network_transmit_bytes_total{namespace=\"iresharma\", pod!=\"\"}[$__range]))", "format": "table", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "showHeader": true }
         }
       ]
     }
