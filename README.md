@@ -22,8 +22,6 @@ apps/
 ## Domain
 
 - **Domain**: `iresharma.com`
-- **Wildcard**: `*.iresharma.com` → 192.168.0.200 (Traefik)
-- **TLS Certificate**: `wildcard-iresharma-tls` (Let's Encrypt)
 - **ClusterIssuer**: `letsencrypt-prod-iresh`
 
 ## Ingress Template
@@ -54,7 +52,7 @@ spec:
   tls:
     - hosts:
         - your-app.iresharma.com
-      secretName: wildcard-iresharma-tls
+      secretName: your-app-iresharma-tls
 ```
 
 ## Restrictions
