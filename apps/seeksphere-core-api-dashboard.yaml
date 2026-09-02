@@ -109,19 +109,60 @@ data:
           "targets": [{ "expr": "100 * sum(rate(http_requests_total{status_code=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total[$__rate_interval]))", "legendFormat": "5xx %", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }
         },
+        {
+          "id": 15, "type": "stat", "title": "Requests by Status Class",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 6, "w": 24, "x": 0, "y": 22 },
+          "targets": [
+            { "expr": "sum(increase(http_requests_total{status_code=~\"2..\"}[$__range]))", "legendFormat": "2xx", "instant": true, "refId": "A" },
+            { "expr": "sum(increase(http_requests_total{status_code=~\"4..\"}[$__range]))", "legendFormat": "4xx", "instant": true, "refId": "B" },
+            { "expr": "sum(increase(http_requests_total{status_code=~\"5..\"}[$__range]))", "legendFormat": "5xx", "instant": true, "refId": "C" }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short" },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "2xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+              { "matcher": { "id": "byName", "options": "4xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+              { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+            ]
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "colorMode": "value", "graphMode": "none" }
+        },
+        {
+          "id": 16, "type": "table", "title": "Requests by Route & Status Class",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 28 },
+          "targets": [
+            { "expr": "sum by (route) (increase(http_requests_total{status_code=~\"2..\"}[$__range]))", "format": "table", "instant": true, "refId": "A" },
+            { "expr": "sum by (route) (increase(http_requests_total{status_code=~\"4..\"}[$__range]))", "format": "table", "instant": true, "refId": "B" },
+            { "expr": "sum by (route) (increase(http_requests_total{status_code=~\"5..\"}[$__range]))", "format": "table", "instant": true, "refId": "C" }
+          ],
+          "transformations": [
+            { "id": "merge", "options": {} },
+            {
+              "id": "organize",
+              "options": {
+                "renameByName": { "route": "Route", "Value #A": "2xx", "Value #B": "4xx", "Value #C": "5xx" },
+                "excludeByName": { "Time": true },
+                "indexByName": {}
+              }
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
 
-        { "id": 20, "type": "row", "title": "Auth", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 } },
+        { "id": 20, "type": "row", "title": "Auth", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 } },
         {
           "id": 21, "type": "timeseries", "title": "Auth Attempts by Backend/Result",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 39 },
           "targets": [{ "expr": "sum by (backend, result) (rate(auth_attempts_total[$__rate_interval]))", "legendFormat": "{{backend}} - {{result}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 22, "type": "timeseries", "title": "Auth Duration (p50/p95 by backend)",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
           "targets": [
             { "expr": "histogram_quantile(0.50, sum by (le, backend) (rate(auth_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{backend}} p50", "refId": "A" },
             { "expr": "histogram_quantile(0.95, sum by (le, backend) (rate(auth_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{backend}} p95", "refId": "B" }
@@ -131,30 +172,30 @@ data:
         {
           "id": 23, "type": "timeseries", "title": "Auth Failures by Reason",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 47 },
           "targets": [{ "expr": "sum by (reason) (rate(auth_attempts_total{result=~\"failure|error\"}[$__rate_interval]))", "legendFormat": "{{reason}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 24, "type": "timeseries", "title": "Auth Success Rate",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 47 },
           "targets": [{ "expr": "100 * sum(rate(auth_attempts_total{result=\"success\"}[$__rate_interval])) / sum(rate(auth_attempts_total[$__rate_interval]))", "legendFormat": "success %", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }
         },
 
-        { "id": 30, "type": "row", "title": "Query Classification Pipeline", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 } },
+        { "id": 30, "type": "row", "title": "Query Classification Pipeline", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 } },
         {
           "id": 31, "type": "timeseries", "title": "Classifications by Source",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
           "targets": [{ "expr": "sum by (source) (rate(query_classifications_total[$__rate_interval]))", "legendFormat": "{{source}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 32, "type": "timeseries", "title": "Query Processing Duration (p50/p95 by source)",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 56 },
           "targets": [
             { "expr": "histogram_quantile(0.50, sum by (le, source) (rate(query_processing_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{source}} p50", "refId": "A" },
             { "expr": "histogram_quantile(0.95, sum by (le, source) (rate(query_processing_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{source}} p95", "refId": "B" }
@@ -164,53 +205,53 @@ data:
         {
           "id": 33, "type": "timeseries", "title": "Query Cache Hit/Miss",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 64 },
           "targets": [{ "expr": "sum by (result) (rate(query_cache_requests_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 34, "type": "timeseries", "title": "Pattern Match Hit/Miss",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 64 },
           "targets": [{ "expr": "sum by (result) (rate(pattern_match_requests_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
 
-        { "id": 40, "type": "row", "title": "Pattern Management", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 } },
+        { "id": 40, "type": "row", "title": "Pattern Management", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 72 } },
         {
           "id": 41, "type": "timeseries", "title": "Patterns Learned Rate",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 73 },
           "targets": [{ "expr": "sum(rate(patterns_learned_total[$__rate_interval]))", "legendFormat": "learned/s", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 42, "type": "timeseries", "title": "Patterns Invalidated by Reason",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 73 },
           "targets": [{ "expr": "sum by (reason) (rate(patterns_invalidated_total[$__rate_interval]))", "legendFormat": "{{reason}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 43, "type": "timeseries", "title": "Patterns Stored by Org",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 65 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 81 },
           "targets": [{ "expr": "patterns_total", "legendFormat": "{{org_id}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
         },
 
-        { "id": 50, "type": "row", "title": "LLM", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 73 } },
+        { "id": 50, "type": "row", "title": "LLM", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 89 } },
         {
           "id": 51, "type": "timeseries", "title": "LLM Call Rate by Step/Result",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 74 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 90 },
           "targets": [{ "expr": "sum by (step, result) (rate(llm_requests_total[$__rate_interval]))", "legendFormat": "{{step}} - {{result}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 52, "type": "timeseries", "title": "LLM Call Duration (p50/p95 by step)",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 74 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 90 },
           "targets": [
             { "expr": "histogram_quantile(0.50, sum by (le, step) (rate(llm_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{step}} p50", "refId": "A" },
             { "expr": "histogram_quantile(0.95, sum by (le, step) (rate(llm_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{step}} p95", "refId": "B" }
@@ -220,37 +261,37 @@ data:
         {
           "id": 53, "type": "timeseries", "title": "Tokens by Step/Type",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 82 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 98 },
           "targets": [{ "expr": "sum by (step, token_type) (rate(llm_tokens_total[$__rate_interval]))", "legendFormat": "{{step}} - {{token_type}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
         },
         {
           "id": 54, "type": "timeseries", "title": "Estimated Cost by Step",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 82 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 98 },
           "targets": [{ "expr": "sum by (step) (rate(llm_cost_usd_total[$__rate_interval]))", "legendFormat": "{{step}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] }
         },
         {
           "id": 55, "type": "timeseries", "title": "LLM Errors by Step/Error Type",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 90 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 106 },
           "targets": [{ "expr": "sum by (step, error_type) (rate(llm_requests_total{result=\"error\"}[$__rate_interval]))", "legendFormat": "{{step}} - {{error_type}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
 
-        { "id": 60, "type": "row", "title": "DynamoDB", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 98 } },
+        { "id": 60, "type": "row", "title": "DynamoDB", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 114 } },
         {
           "id": 61, "type": "timeseries", "title": "DynamoDB Ops by Operation/Result",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 99 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 115 },
           "targets": [{ "expr": "sum by (operation, result) (rate(dynamodb_operations_total[$__rate_interval]))", "legendFormat": "{{operation}} - {{result}}", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
         },
         {
           "id": 62, "type": "timeseries", "title": "DynamoDB Duration (p50/p95 by operation)",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 99 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 115 },
           "targets": [
             { "expr": "histogram_quantile(0.50, sum by (le, operation) (rate(dynamodb_operation_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{operation}} p50", "refId": "A" },
             { "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(dynamodb_operation_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{operation}} p95", "refId": "B" }
@@ -258,27 +299,27 @@ data:
           "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
         },
 
-        { "id": 70, "type": "row", "title": "Python Process", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 107 } },
+        { "id": 70, "type": "row", "title": "Python Process", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 123 } },
         {
           "id": 71, "type": "timeseries", "title": "Process CPU Usage",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 108 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 124 },
           "targets": [{ "expr": "rate(process_cpu_seconds_total{job=~\".*core-api.*\"}[$__rate_interval])", "legendFormat": "cpu", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
         },
         {
           "id": 72, "type": "timeseries", "title": "Process Memory (RSS)",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 108 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 124 },
           "targets": [{ "expr": "process_resident_memory_bytes{job=~\".*core-api.*\"}", "legendFormat": "rss", "refId": "A" }],
           "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
         },
 
-        { "id": 80, "type": "row", "title": "Pod Resources (CPU & Memory)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 116 } },
+        { "id": 80, "type": "row", "title": "Pod Resources (CPU & Memory)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 132 } },
         {
           "id": 81, "type": "timeseries", "title": "CPU Usage",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 117 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 133 },
           "targets": [
             { "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container=~\"seeksphere-core-api|dynamodb-local\"}[$__rate_interval]))", "legendFormat": "{{container}} ({{pod}})", "refId": "A" },
             { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", container=~\"seeksphere-core-api|dynamodb-local\", resource=\"cpu\"})", "legendFormat": "limit total", "refId": "B" }
@@ -288,7 +329,7 @@ data:
         {
           "id": 82, "type": "timeseries", "title": "Memory Usage",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 117 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 133 },
           "targets": [
             { "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"iresharma\", container=~\"seeksphere-core-api|dynamodb-local\"})", "legendFormat": "{{container}} ({{pod}})", "refId": "A" },
             { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", container=~\"seeksphere-core-api|dynamodb-local\", resource=\"memory\"})", "legendFormat": "limit total", "refId": "B" }
