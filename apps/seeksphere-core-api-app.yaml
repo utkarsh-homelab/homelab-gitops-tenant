@@ -35,7 +35,11 @@ spec:
         - name: dynamodb-local
           image: amazon/dynamodb-local:latest
           workingDir: /home/dynamodblocal
-          command:
+          # args (not command) - the image's ENTRYPOINT is `java ...`, and
+          # k8s `command` overrides ENTRYPOINT (unlike docker-compose's
+          # `command`, which only overrides CMD), so `command` here would
+          # try to exec "-jar" directly instead of passing it to java.
+          args:
             - "-jar"
             - "DynamoDBLocal.jar"
             - "-sharedDb"
