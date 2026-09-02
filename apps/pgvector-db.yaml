@@ -2,6 +2,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: pgvector-app-iresh
+  namespace: postgres
 spec:
   name: lensdistill
   owner: postgres
