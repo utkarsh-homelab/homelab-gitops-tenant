@@ -112,7 +112,7 @@ spec:
     spec:
       containers:
         - name: seeksphere-core-api
-          image: iresharma/seeksphere-core-api:1.0.0
+          image: iresharma/seeksphere-core-api:1.0.1
           ports:
             - name: http
               containerPort: 3004
