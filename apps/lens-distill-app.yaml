@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: lens-distill
-          image: iresharma/lens-distill:2.2.1
+          image: iresharma/lens-distill:2.3.0
           ports:
             - name: http
               containerPort: 3000
