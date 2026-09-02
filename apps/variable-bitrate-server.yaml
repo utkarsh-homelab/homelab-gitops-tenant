@@ -8,7 +8,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -54,7 +54,7 @@ spec:
             runAsUser: 0
       containers:
         - name: variable-bitrate-server
-          image: iresharma/variable-bitrate-server:1.0.2
+          image: iresharma/variable-bitrate-server:1.1.0
           ports:
             - containerPort: 8080
           env:
@@ -63,7 +63,7 @@ spec:
             # Baked into every HLS/DASH manifest URL the server generates -
             # must match the Ingress host below.
             - name: HOST
-              value: "https://vbr.tenant.uttutu.xyz"
+              value: "https://vbr.iresharma.com"
           volumeMounts:
             - name: data
               mountPath: /app/src/uploadedVideos
