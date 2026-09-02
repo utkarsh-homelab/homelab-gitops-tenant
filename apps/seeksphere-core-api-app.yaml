@@ -120,7 +120,7 @@ spec:
             # DYNAMODB_ENDPOINT_URL is the only non-secret value - it just
             # points at the in-cluster dynamodb-local Service below.
             - name: DYNAMODB_ENDPOINT_URL
-              value: "http://seeksphere-core-api-dynamodb-local:8000"
+              value: "http://seeksphere-core-api-dynamodb-local.iresharma.svc.cluster.local:8000"
             # Must be set to "3004" in the secret - containerPort, the
             # probes below, and the Service's targetPort are all hardcoded
             # to 3004 since Kubernetes can't resolve those from an env var.
