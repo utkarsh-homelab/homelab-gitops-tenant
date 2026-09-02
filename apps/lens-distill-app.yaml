@@ -101,4 +101,4 @@ spec:
   tls:
     - hosts:
         - lens-distill.iresharma.com
-      secretName: wildcard-iresharma-tls 
+      secretName: wildcard-iresharma 
