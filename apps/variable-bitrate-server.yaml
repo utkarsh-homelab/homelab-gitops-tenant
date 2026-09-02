@@ -166,4 +166,4 @@ spec:
   tls:
     - hosts:
         - vbr.iresharma.com
-      secretName: variable-bitrate-server-tls
+      secretName: wildcard-iresharma-tls
