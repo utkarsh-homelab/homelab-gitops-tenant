@@ -19,17 +19,10 @@ spec:
     spec:
       containers:
         - name: lens-distill
-          # NOTE: 1.0.0 was built against @neondatabase/serverless (Neon's
-          # HTTP/WS proxy protocol) and will NOT connect to the plain
-          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 was the
-          # drizzle-orm/node-postgres driver swap (breaking); 2.1.0 adds the
-          # Prometheus-pullable metrics this file's ServiceMonitor scrapes.
-          image: iresharma/lens-distill:2.1.0
+          image: iresharma/lens-distill:2.1.1
           ports:
             - name: http
               containerPort: 3000
-            # OTel PrometheusExporter's own pull listener (separate from the
-            # Next.js app port) - see src/lib/otel/sdk.ts in the lens-distill repo.
             - name: metrics
               containerPort: 9464
           env:
@@ -81,8 +74,6 @@ spec:
   selector:
     app: lens-distill
   ports:
-    # Named so the ServiceMonitor below can target it by name rather than
-    # number.
     - name: http
       port: 80
       targetPort: 3000
@@ -103,9 +94,6 @@ spec:
     matchLabels:
       app: lens-distill
   endpoints:
-    # OTel PrometheusExporter serves GET /metrics on its own port (9464),
-    # separate from the app's HTTP port - see src/lib/otel/sdk.ts and
-    # src/lib/otel/meter.ts in the lens-distill repo.
     - port: metrics
       path: /metrics
       interval: 30s
