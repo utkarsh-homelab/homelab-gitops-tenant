@@ -1,0 +1,209 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iresharma-namespace-resources-dashboard
+  namespace: iresharma
+  labels:
+    # Picked up by the shared kube-prometheus-stack Grafana sidecar
+    # (searchNamespace: ALL), which imports any ConfigMap carrying this
+    # label as a dashboard - see charts/kube-prometheus-stack/values/prod.yaml
+    # in homelab-infra-charts.
+    grafana_dashboard: "1"
+data:
+  iresharma-namespace-resources.json: |-
+    {
+      "title": "iresharma Namespace Resources",
+      "uid": "iresharma-namespace-resources",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "graphTooltip": 1,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "tags": ["iresharma", "resources", "capacity"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Prometheus",
+            "current": {}
+          }
+        ]
+      },
+      "panels": [
+        { "id": 1, "type": "row", "title": "Namespace Totals vs Resource Quota", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+        {
+          "id": 2, "type": "stat", "title": "CPU Usage vs Quota (cores)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "targets": [
+            { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.cpu\"}", "legendFormat": "quota", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "type": "gauge", "title": "CPU Usage % of Quota",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "targets": [{ "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}[$__rate_interval])) / kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.cpu\"}", "legendFormat": "cpu %", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "red", "value": 90 }
+              ] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 4, "type": "stat", "title": "Memory Usage vs Quota",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "targets": [
+            { "expr": "sum(container_memory_working_set_bytes{namespace=\"iresharma\", container!=\"\", container!=\"POD\"})", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.memory\"}", "legendFormat": "quota", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 5, "type": "gauge", "title": "Memory Usage % of Quota",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "targets": [{ "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}) / kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.memory\"}", "legendFormat": "memory %", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "red", "value": 90 }
+              ] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+
+        { "id": 10, "type": "row", "title": "Usage Over Time vs Quota", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+        {
+          "id": 11, "type": "timeseries", "title": "Total CPU Usage vs Quota (cores)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [
+            { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "total cpu used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.cpu\"}", "legendFormat": "quota (hard limit)", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [
+            { "matcher": { "id": "byName", "options": "quota (hard limit)" }, "properties": [{ "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } }] }
+          ] }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Total Memory Usage vs Quota",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [
+            { "expr": "sum(container_memory_working_set_bytes{namespace=\"iresharma\", container!=\"\", container!=\"POD\"})", "legendFormat": "total memory used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"limits.memory\"}", "legendFormat": "quota (hard limit)", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [
+            { "matcher": { "id": "byName", "options": "quota (hard limit)" }, "properties": [{ "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } }] }
+          ] }
+        },
+
+        { "id": 20, "type": "row", "title": "Per-Pod / Per-Container Breakdown", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 } },
+        {
+          "id": 21, "type": "timeseries", "title": "CPU Usage by Pod/Container",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+          "targets": [{ "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "{{pod}} / {{container}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 22, "type": "timeseries", "title": "Memory Usage by Pod/Container",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+          "targets": [{ "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"iresharma\", container!=\"\", container!=\"POD\"})", "legendFormat": "{{pod}} / {{container}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+        },
+        {
+          "id": 23, "type": "table", "title": "Current CPU Usage by Pod (cores)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+          "targets": [{ "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "format": "table", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "showHeader": true }
+        },
+        {
+          "id": 24, "type": "table", "title": "Current Memory Usage by Pod",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+          "targets": [{ "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"iresharma\", container!=\"\", container!=\"POD\"})", "format": "table", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "showHeader": true }
+        },
+
+        { "id": 30, "type": "row", "title": "Quota & LimitRange Details", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 } },
+        {
+          "id": 31, "type": "stat", "title": "Pods (used / hard)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 32 },
+          "targets": [
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"used\", resource=\"pods\"}", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"pods\"}", "legendFormat": "hard", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 32, "type": "stat", "title": "PVCs (used / hard)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 32 },
+          "targets": [
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"used\", resource=\"persistentvolumeclaims\"}", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"persistentvolumeclaims\"}", "legendFormat": "hard", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 33, "type": "stat", "title": "CPU Requests (used / hard, cores)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 32 },
+          "targets": [
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"used\", resource=\"requests.cpu\"}", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"requests.cpu\"}", "legendFormat": "hard", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 34, "type": "stat", "title": "Memory Requests (used / hard)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 32 },
+          "targets": [
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"used\", resource=\"requests.memory\"}", "legendFormat": "used", "refId": "A" },
+            { "expr": "kube_resourcequota{namespace=\"iresharma\", type=\"hard\", resource=\"requests.memory\"}", "legendFormat": "hard", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 35, "type": "table", "title": "LimitRange Constraints (per container)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+          "targets": [{ "expr": "kube_limitrange{namespace=\"iresharma\"}", "format": "table", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "showHeader": true }
+        }
+      ]
+    }
