@@ -1,0 +1,299 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: core-api-dashboard
+  namespace: iresharma
+  labels:
+    # Picked up by the shared kube-prometheus-stack Grafana sidecar
+    # (searchNamespace: ALL), which imports any ConfigMap carrying this
+    # label as a dashboard - see charts/kube-prometheus-stack/values/prod.yaml
+    # in homelab-infra-charts.
+    grafana_dashboard: "1"
+data:
+  core-api.json: |-
+    {
+      "title": "SeekSphere Core API",
+      "uid": "core-api",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "graphTooltip": 1,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "tags": ["core-api", "seeksphere"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Prometheus",
+            "current": {}
+          }
+        ]
+      },
+      "panels": [
+        { "id": 1, "type": "row", "title": "Overview", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+        {
+          "id": 2, "type": "stat", "title": "HTTP Active Requests",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+          "targets": [{ "expr": "sum(http_requests_in_progress)", "legendFormat": "active", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "type": "stat", "title": "DynamoDB Ops (total)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+          "targets": [{ "expr": "sum(dynamodb_operations_total)", "legendFormat": "ops", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 4, "type": "stat", "title": "LLM Calls (total)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+          "targets": [{ "expr": "sum(llm_requests_total)", "legendFormat": "calls", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 5, "type": "stat", "title": "Patterns Stored",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+          "targets": [{ "expr": "sum(patterns_total)", "legendFormat": "patterns", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 6, "type": "stat", "title": "LLM Cost (total)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+          "targets": [{ "expr": "sum(llm_cost_usd_total)", "legendFormat": "cost", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+
+        { "id": 10, "type": "row", "title": "HTTP Traffic", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+        {
+          "id": 11, "type": "timeseries", "title": "Request Rate by Route",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [{ "expr": "sum by (route) (rate(http_requests_total[$__rate_interval]))", "legendFormat": "{{route}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Request Rate by Status Code",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [{ "expr": "sum by (status_code) (rate(http_requests_total[$__rate_interval]))", "legendFormat": "{{status_code}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        },
+        {
+          "id": 13, "type": "timeseries", "title": "Request Latency (p50/p95/p99)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" },
+            { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 14, "type": "timeseries", "title": "5xx Error Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "targets": [{ "expr": "100 * sum(rate(http_requests_total{status_code=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total[$__rate_interval]))", "legendFormat": "5xx %", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }
+        },
+
+        { "id": 20, "type": "row", "title": "Auth", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 } },
+        {
+          "id": 21, "type": "timeseries", "title": "Auth Attempts by Backend/Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+          "targets": [{ "expr": "sum by (backend, result) (rate(auth_attempts_total[$__rate_interval]))", "legendFormat": "{{backend}} - {{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 22, "type": "timeseries", "title": "Auth Duration (p50/p95 by backend)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le, backend) (rate(auth_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{backend}} p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le, backend) (rate(auth_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{backend}} p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 23, "type": "timeseries", "title": "Auth Failures by Reason",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+          "targets": [{ "expr": "sum by (reason) (rate(auth_attempts_total{result=~\"failure|error\"}[$__rate_interval]))", "legendFormat": "{{reason}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 24, "type": "timeseries", "title": "Auth Success Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+          "targets": [{ "expr": "100 * sum(rate(auth_attempts_total{result=\"success\"}[$__rate_interval])) / sum(rate(auth_attempts_total[$__rate_interval]))", "legendFormat": "success %", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }
+        },
+
+        { "id": 30, "type": "row", "title": "Query Classification Pipeline", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 } },
+        {
+          "id": 31, "type": "timeseries", "title": "Classifications by Source",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "targets": [{ "expr": "sum by (source) (rate(query_classifications_total[$__rate_interval]))", "legendFormat": "{{source}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 32, "type": "timeseries", "title": "Query Processing Duration (p50/p95 by source)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le, source) (rate(query_processing_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{source}} p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le, source) (rate(query_processing_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{source}} p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 33, "type": "timeseries", "title": "Query Cache Hit/Miss",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+          "targets": [{ "expr": "sum by (result) (rate(query_cache_requests_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 34, "type": "timeseries", "title": "Pattern Match Hit/Miss",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+          "targets": [{ "expr": "sum by (result) (rate(pattern_match_requests_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+
+        { "id": 40, "type": "row", "title": "Pattern Management", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 } },
+        {
+          "id": 41, "type": "timeseries", "title": "Patterns Learned Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 57 },
+          "targets": [{ "expr": "sum(rate(patterns_learned_total[$__rate_interval]))", "legendFormat": "learned/s", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 42, "type": "timeseries", "title": "Patterns Invalidated by Reason",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 57 },
+          "targets": [{ "expr": "sum by (reason) (rate(patterns_invalidated_total[$__rate_interval]))", "legendFormat": "{{reason}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 43, "type": "timeseries", "title": "Patterns Stored by Org",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 65 },
+          "targets": [{ "expr": "patterns_total", "legendFormat": "{{org_id}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+
+        { "id": 50, "type": "row", "title": "LLM", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 73 } },
+        {
+          "id": 51, "type": "timeseries", "title": "LLM Call Rate by Step/Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 74 },
+          "targets": [{ "expr": "sum by (step, result) (rate(llm_requests_total[$__rate_interval]))", "legendFormat": "{{step}} - {{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 52, "type": "timeseries", "title": "LLM Call Duration (p50/p95 by step)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 74 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le, step) (rate(llm_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{step}} p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le, step) (rate(llm_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{step}} p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 53, "type": "timeseries", "title": "Tokens by Step/Type",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 82 },
+          "targets": [{ "expr": "sum by (step, token_type) (rate(llm_tokens_total[$__rate_interval]))", "legendFormat": "{{step}} - {{token_type}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 54, "type": "timeseries", "title": "Estimated Cost by Step",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 82 },
+          "targets": [{ "expr": "sum by (step) (rate(llm_cost_usd_total[$__rate_interval]))", "legendFormat": "{{step}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] }
+        },
+        {
+          "id": 55, "type": "timeseries", "title": "LLM Errors by Step/Error Type",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 90 },
+          "targets": [{ "expr": "sum by (step, error_type) (rate(llm_requests_total{result=\"error\"}[$__rate_interval]))", "legendFormat": "{{step}} - {{error_type}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+
+        { "id": 60, "type": "row", "title": "DynamoDB", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 98 } },
+        {
+          "id": 61, "type": "timeseries", "title": "DynamoDB Ops by Operation/Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 99 },
+          "targets": [{ "expr": "sum by (operation, result) (rate(dynamodb_operations_total[$__rate_interval]))", "legendFormat": "{{operation}} - {{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 62, "type": "timeseries", "title": "DynamoDB Duration (p50/p95 by operation)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 99 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le, operation) (rate(dynamodb_operation_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{operation}} p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(dynamodb_operation_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "{{operation}} p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+
+        { "id": 70, "type": "row", "title": "Python Process", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 107 } },
+        {
+          "id": 71, "type": "timeseries", "title": "Process CPU Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 108 },
+          "targets": [{ "expr": "rate(process_cpu_seconds_total{job=~\".*core-api.*\"}[$__rate_interval])", "legendFormat": "cpu", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+        },
+        {
+          "id": 72, "type": "timeseries", "title": "Process Memory (RSS)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 108 },
+          "targets": [{ "expr": "process_resident_memory_bytes{job=~\".*core-api.*\"}", "legendFormat": "rss", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+        },
+
+        { "id": 80, "type": "row", "title": "Pod Resources (CPU & Memory)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 116 } },
+        {
+          "id": 81, "type": "timeseries", "title": "CPU Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 117 },
+          "targets": [
+            { "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", container=~\"core-api|dynamodb-local\"}[$__rate_interval]))", "legendFormat": "{{container}} ({{pod}})", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", container=~\"core-api|dynamodb-local\", resource=\"cpu\"})", "legendFormat": "limit total", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 82, "type": "timeseries", "title": "Memory Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 117 },
+          "targets": [
+            { "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"iresharma\", container=~\"core-api|dynamodb-local\"})", "legendFormat": "{{container}} ({{pod}})", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", container=~\"core-api|dynamodb-local\", resource=\"memory\"})", "legendFormat": "limit total", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+        }
+      ]
+    }

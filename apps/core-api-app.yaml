@@ -1,0 +1,254 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: core-api-dynamodb-local-data
+  namespace: iresharma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api-dynamodb-local
+  namespace: iresharma
+  labels:
+    app: core-api-dynamodb-local
+spec:
+  replicas: 1
+  # RWO + a single replica: a new pod must not start before the old one
+  # releases the volume, which RollingUpdate does not guarantee.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: core-api-dynamodb-local
+  template:
+    metadata:
+      labels:
+        app: core-api-dynamodb-local
+    spec:
+      containers:
+        - name: dynamodb-local
+          image: amazon/dynamodb-local:latest
+          workingDir: /home/dynamodblocal
+          command:
+            - "-jar"
+            - "DynamoDBLocal.jar"
+            - "-sharedDb"
+            - "-dbPath"
+            - "/home/dynamodblocal/data"
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /home/dynamodblocal/data
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 50m
+            limits:
+              # DynamoDBLocal.jar is a JVM process - needs more headroom than
+              # the cpu floor to start up without getting OOM killed.
+              memory: 768Mi
+              cpu: 300m
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: core-api-dynamodb-local-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api-dynamodb-local
+  namespace: iresharma
+  labels:
+    app: core-api-dynamodb-local
+spec:
+  selector:
+    app: core-api-dynamodb-local
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  namespace: iresharma
+  labels:
+    app: core-api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: core-api
+  template:
+    metadata:
+      labels:
+        app: core-api
+    spec:
+      containers:
+        - name: core-api
+          image: iresharma/seeksphere-core-api:1.0.0
+          ports:
+            - name: http
+              containerPort: 3004
+          env:
+            # DYNAMODB_ENDPOINT_URL is the only non-secret value - it just
+            # points at the in-cluster dynamodb-local Service below.
+            - name: DYNAMODB_ENDPOINT_URL
+              value: "http://core-api-dynamodb-local:8000"
+            # Must be set to "3004" in the secret - containerPort, the
+            # probes below, and the Service's targetPort are all hardcoded
+            # to 3004 since Kubernetes can't resolve those from an env var.
+            - name: PORT
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: PORT
+            # This deployment doesn't run Redis - dynamoStore.Store() falls
+            # back to DynamoDB-only mode when REDIS_ENABLED is false.
+            - name: REDIS_ENABLED
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: REDIS_ENABLED
+            - name: DYNAMODB_TABLE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: DYNAMODB_TABLE_NAME
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: AWS_REGION
+            # DynamoDB Local ignores credentials but the SDK still requires
+            # something to be set - matches the docker-compose defaults.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: CLERK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: CLERK_SECRET_KEY
+            - name: CLERK_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: CLERK_PUBLISHABLE_KEY
+            - name: CLERK_JWT_VERIFICATION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: CLERK_JWT_VERIFICATION_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: core-api-secrets
+                  key: OPENROUTER_API_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 50m
+            limits:
+              memory: 1Gi
+              cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api
+  namespace: iresharma
+  labels:
+    app: core-api
+spec:
+  selector:
+    app: core-api
+  ports:
+    # /metrics is served by the same FastAPI app on the same port - see
+    # metrics.py and the get_metrics() route in main.py.
+    - name: http
+      port: 80
+      targetPort: 3004
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: core-api
+  namespace: iresharma
+  labels:
+    app: core-api
+spec:
+  selector:
+    matchLabels:
+      app: core-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: core-api
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-iresh
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: api.seeksphere.iresharma.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: core-api
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - api.seeksphere.iresharma.com
+      secretName: core-api-iresharma-tls
