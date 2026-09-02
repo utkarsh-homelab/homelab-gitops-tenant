@@ -21,7 +21,8 @@ spec:
         - name: lens-distill
           # NOTE: 1.0.0 was built against @neondatabase/serverless (Neon's
           # HTTP/WS proxy protocol) and will NOT connect to the plain
-          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 (breaking:
+          # postgres wire protocol the CloudNativePG cluster in
+          # lens-distill-postgres.yaml speaks. 2.0.0 (breaking:
           # drizzle-orm/node-postgres driver swap) is the placeholder tag
           # this points at until that build is actually pushed.
           image: iresharma/lens-distill:2.0.0
@@ -31,10 +32,14 @@ spec:
             - name: PORT
               value: "3000"
             - name: DATABASE_URL
+              # CloudNativePG auto-generates this secret (key `uri` is a
+              # ready-to-use postgresql:// connection string for the `app`
+              # role) - it is never defined in this repo, same as how
+              # cert-manager creates the *-tls secrets Ingresses reference.
               valueFrom:
                 secretKeyRef:
-                  name: lens-distill-secrets
-                  key: DATABASE_URL
+                  name: lens-distill-postgres-app
+                  key: uri
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:

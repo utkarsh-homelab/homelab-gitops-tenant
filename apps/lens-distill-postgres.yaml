@@ -1,0 +1,41 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: lens-distill-postgres
+  namespace: iresharma
+spec:
+  # pgvector's official image - plain postgres plus the `vector` extension
+  # lens-distill's schema (drizzle `vector()` columns, HNSW neighbor search)
+  # requires. Built on the same base the CloudNativePG operand images use,
+  # so it's a drop-in imageName.
+  imageName: pgvector/pgvector:pg16
+
+  instances: 1
+
+  bootstrap:
+    initdb:
+      database: lensdistill
+      owner: lensdistill
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector;
+
+  storage:
+    size: 2Gi
+    # lens-distill caps ingestion at 3 books/week site-wide with per-book
+    # size guards (see its README), so this stays small on purpose.
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 50m
+    limits:
+      memory: 768Mi
+      cpu: 500m
+
+  monitoring:
+    # Creates a PodMonitor for this Cluster's instances automatically -
+    # picked up by the shared kube-prometheus-stack the same way the
+    # ServiceMonitor in variable-bitrate-server.yaml is (permissive
+    # podMonitorNamespaceSelector/podMonitorSelectorNilUsesHelmValues in
+    # homelab-infra-charts). No manifest of our own needed for it.
+    enablePodMonitor: true
