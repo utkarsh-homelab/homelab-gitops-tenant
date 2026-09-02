@@ -43,6 +43,11 @@ spec:
                 secretKeyRef:
                   name: lens-distill-secrets
                   key: OPENROUTER_API_KEY
+            - name: ANTHROPIC_WORKSPACE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lens-distill-secrets
+                  key: ANTHROPIC_WORKSPACE_ID
           readinessProbe:
             httpGet:
               path: /
