@@ -235,6 +235,28 @@ data:
             { "expr": "hls_server_nodejs_active_requests_total", "legendFormat": "requests", "refId": "B" }
           ],
           "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+
+        { "id": 70, "type": "row", "title": "Pod Resources (CPU & Memory)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 91 } },
+        {
+          "id": 71, "type": "timeseries", "title": "CPU Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 92 },
+          "targets": [
+            { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", pod=~\"variable-bitrate-server-.*\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "{{pod}}", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"variable-bitrate-server-.*\", resource=\"cpu\"})", "legendFormat": "limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 72, "type": "timeseries", "title": "Memory Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 92 },
+          "targets": [
+            { "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"iresharma\", pod=~\"variable-bitrate-server-.*\", container!=\"\", container!=\"POD\"})", "legendFormat": "{{pod}}", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"variable-bitrate-server-.*\", resource=\"memory\"})", "legendFormat": "limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
         }
       ]
     }
