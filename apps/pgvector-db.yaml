@@ -1,0 +1,12 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: pgvector-app-iresh
+spec:
+  name: app
+  owner: app
+  cluster:
+    name: homelab-postgres
+  extensions:
+  - name: vector
+
