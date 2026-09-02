@@ -21,12 +21,17 @@ spec:
         - name: lens-distill
           # NOTE: 1.0.0 was built against @neondatabase/serverless (Neon's
           # HTTP/WS proxy protocol) and will NOT connect to the plain
-          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 (breaking:
-          # drizzle-orm/node-postgres driver swap) is the placeholder tag
-          # this points at until that build is actually pushed.
-          image: iresharma/lens-distill:2.0.0
+          # postgres deployed in lens-distill-postgres.yaml. 2.0.0 was the
+          # drizzle-orm/node-postgres driver swap (breaking); 2.1.0 adds the
+          # Prometheus-pullable metrics this file's ServiceMonitor scrapes.
+          image: iresharma/lens-distill:2.1.0
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
+            # OTel PrometheusExporter's own pull listener (separate from the
+            # Next.js app port) - see src/lib/otel/sdk.ts in the lens-distill repo.
+            - name: metrics
+              containerPort: 9464
           env:
             - name: PORT
               value: "3000"
@@ -70,13 +75,40 @@ kind: Service
 metadata:
   name: lens-distill
   namespace: iresharma
+  labels:
+    app: lens-distill
 spec:
   selector:
     app: lens-distill
   ports:
-    - port: 80
+    # Named so the ServiceMonitor below can target it by name rather than
+    # number.
+    - name: http
+      port: 80
       targetPort: 3000
+    - name: metrics
+      port: 9464
+      targetPort: 9464
   type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lens-distill
+  namespace: iresharma
+  labels:
+    app: lens-distill
+spec:
+  selector:
+    matchLabels:
+      app: lens-distill
+  endpoints:
+    # OTel PrometheusExporter serves GET /metrics on its own port (9464),
+    # separate from the app's HTTP port - see src/lib/otel/sdk.ts and
+    # src/lib/otel/meter.ts in the lens-distill repo.
+    - port: metrics
+      path: /metrics
+      interval: 30s
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
