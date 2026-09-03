@@ -137,6 +137,25 @@ spec:
       port: 80
       targetPort: 8080
 ---
+# The collector serves /metrics on the same port as the UI/API (there's
+# only one HTTP server in the binary) — this ServiceMonitor scrapes the
+# existing "http" Service port rather than adding a redundant second one.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tracer-collector
+  namespace: iresharma
+  labels:
+    app: tracer-collector
+spec:
+  selector:
+    matchLabels:
+      app: tracer-collector
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -145,26 +164,140 @@ metadata:
 data:
   COLLECTOR_URL: "http://tracer-collector.iresharma.svc.cluster.local"
   TRACE_ID_FIELD: "trace_id"
-  LOG_ROOT: "/var/log/pods"
-  CHECKPOINT_PATH: "/var/lib/tracer-agent/checkpoints.json"
-  POLL_INTERVAL: "250ms"
-  RESCAN_INTERVAL: "30s"
-  MAX_LINE_BYTES: "262144"
+  INGESTION_MODE: "api"
+  # Purely a label on outgoing batches (api mode gets each line's real
+  # node from the Kubernetes API directly, per pod — this isn't used for
+  # that) — set so it reads as something meaningful rather than the
+  # "unknown-node" default if you ever look at collector-side batch logs.
+  NODE_NAME: "tracer-agent-api"
+  # WATCH_NAMESPACE left unset on purpose: the agent falls back to reading
+  # its own namespace from the in-cluster serviceaccount volume, and it
+  # would only ever be allowed to watch "iresharma" here anyway (see the
+  # Role below) — setting it explicitly would just be a second place this
+  # namespace name could go stale.
   FLUSH_INTERVAL: "2s"
   MAX_BATCH_SIZE: "500"
   MAX_BATCH_BYTES: "524288"
   RING_BUFFER_CAPACITY: "20"
-  CHECKPOINT_FLUSH_INTERVAL: "3s"
-  START_AT_END: "true"
 ---
-# No ServiceAccount / RBAC objects here — intentional. The agent derives
-# all namespace/pod/container metadata from the kubelet's on-disk log path
-# naming (/var/log/pods/<namespace>_<pod>_<uid>/<container>/*.log) and
-# never talks to the Kubernetes API server, so it needs no permissions
-# there. It does need the two hostPath mounts below, which is the part
-# most likely to need cluster-admin sign-off in a multi-tenant setup.
+# --- api-mode agent: no hostPath, needs RBAC instead --------------------
+#
+# The original design was a DaemonSet reading /var/log via hostPath — see
+# git history on this file. That got rejected outright: this namespace
+# enforces Pod Security "baseline", which disallows hostPath volumes
+# unconditionally, so every agent pod failed to schedule
+# ("forbidden: hostPath volumes").
+#
+# This is the replacement: the agent watches Pods in this namespace via
+# the Kubernetes API and streams each container's logs through the
+# pods/log subresource — the same mechanism `kubectl logs -f` uses. No
+# hostPath, so it passes "baseline" cleanly, and it only ever sees pods
+# already inside "iresharma" (tighter blast radius than the old hostPath
+# mount, which could technically read any tenant's logs on a node). It
+# needs RBAC to do this, which the "iresharma" tenant identity itself
+# cannot self-grant (`kubectl auth can-i create roles -n iresharma` → no)
+# — if this Role/RoleBinding doesn't take effect after merge, that's why;
+# it needs whoever administers this cluster to apply it (or grant ArgoCD's
+# own sync identity rights to create RBAC objects in tenant namespaces).
+#
+# Deployment, not DaemonSet: one process watching the whole namespace via
+# the API covers every pod in it regardless of which node it's on, so
+# there's no per-node replication to do here the way there was for
+# hostPath tailing.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tracer-agent-pod-logs
+  namespace: iresharma
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tracer-agent-pod-logs
+  namespace: iresharma
+subjects:
+  - kind: ServiceAccount
+    name: tracer-agent
+    namespace: iresharma
+roleRef:
+  kind: Role
+  name: tracer-agent-pod-logs
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+  labels:
+    app: tracer-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tracer-agent
+  template:
+    metadata:
+      labels:
+        app: tracer-agent
+    spec:
+      serviceAccountName: tracer-agent
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: agent
+          image: iresharma/tracer-agent:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9091
+              name: metrics
+          envFrom:
+            - configMapRef:
+                name: tracer-agent-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+# The agent has no other Service (it only ever makes outbound calls to the
+# collector) — this one exists purely so Prometheus has something to
+# discover for metrics scraping.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+spec:
+  type: ClusterIP
+  selector:
+    app: tracer-agent
+  ports:
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
 metadata:
   name: tracer-agent
   namespace: iresharma
@@ -174,54 +307,7 @@ spec:
   selector:
     matchLabels:
       app: tracer-agent
-  template:
-    metadata:
-      labels:
-        app: tracer-agent
-    spec:
-      terminationGracePeriodSeconds: 15
-      containers:
-        - name: agent
-          image: iresharma/tracer-agent:latest
-          imagePullPolicy: IfNotPresent
-          envFrom:
-            - configMapRef:
-                name: tracer-agent-config
-          env:
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
-          volumeMounts:
-            # Mounting the whole /var/log tree (not just /var/log/pods) is
-            # deliberate: pod log entries under /var/log/pods are typically
-            # symlinks resolving through /var/log/containers into
-            # runtime-specific storage, and mounting the parent guarantees
-            # those symlink chains resolve regardless of container runtime.
-            - name: varlog
-              mountPath: /var/log
-              readOnly: true
-            # hostPath (not emptyDir) so checkpoints survive agent pod
-            # restarts on the same node.
-            - name: checkpoints
-              mountPath: /var/lib/tracer-agent
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          resources:
-            requests:
-              cpu: 50m
-              memory: 32Mi
-            limits:
-              cpu: 200m
-              memory: 96Mi
-      volumes:
-        - name: varlog
-          hostPath:
-            path: /var/log
-            type: Directory
-        - name: checkpoints
-          hostPath:
-            path: /var/lib/tracer-agent
-            type: DirectoryOrCreate
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
