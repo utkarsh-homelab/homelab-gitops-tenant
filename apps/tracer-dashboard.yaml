@@ -1,0 +1,283 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tracer-dashboard
+  namespace: iresharma
+  labels:
+    # Picked up by the shared kube-prometheus-stack Grafana sidecar
+    # (searchNamespace: ALL), which imports any ConfigMap carrying this
+    # label as a dashboard - see charts/kube-prometheus-stack/values/prod.yaml
+    # in homelab-infra-charts.
+    grafana_dashboard: "1"
+data:
+  tracer.json: |-
+    {
+      "title": "Tracer",
+      "uid": "tracer",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "graphTooltip": 1,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "tags": ["tracer", "logs", "tracing"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Prometheus",
+            "current": {}
+          }
+        ]
+      },
+      "panels": [
+        { "id": 1, "type": "row", "title": "Overview", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+        {
+          "id": 2, "type": "stat", "title": "Ingest Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "targets": [{ "expr": "sum(rate(tracer_collector_ingest_entries_total[$__rate_interval]))", "legendFormat": "entries/s", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "type": "stat", "title": "Forwarder Ring Drops (data loss)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "targets": [{ "expr": "sum(tracer_agent_forwarder_ring_dropped_total)", "legendFormat": "dropped", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 4, "type": "stat", "title": "Writer Queue Depth",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "targets": [{ "expr": "tracer_collector_writer_queue_depth", "legendFormat": "depth", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 5, "type": "stat", "title": "Ad-hoc SQL Queries Rejected",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "targets": [{ "expr": "sum(tracer_collector_query_total{result=\"rejected\"})", "legendFormat": "rejected", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+
+        { "id": 10, "type": "row", "title": "Collector: Ingest & Writer", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+        {
+          "id": 11, "type": "timeseries", "title": "Ingest Entries by Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [{ "expr": "sum by (result) (rate(tracer_collector_ingest_entries_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Writer Flush Duration (p50/p95/p99)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(tracer_collector_writer_flush_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(tracer_collector_writer_flush_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" },
+            { "expr": "histogram_quantile(0.99, sum by (le) (rate(tracer_collector_writer_flush_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 13, "type": "timeseries", "title": "Rows Written / Insert Errors",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "targets": [
+            { "expr": "rate(tracer_collector_writer_rows_written_total[$__rate_interval])", "legendFormat": "rows written/s", "refId": "A" },
+            { "expr": "rate(tracer_collector_writer_insert_errors_total[$__rate_interval])", "legendFormat": "insert errors/s", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 14, "type": "timeseries", "title": "Writer Queue Depth vs Capacity",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "targets": [
+            { "expr": "tracer_collector_writer_queue_depth", "legendFormat": "depth", "refId": "A" },
+            { "expr": "tracer_collector_writer_queue_capacity", "legendFormat": "capacity", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+
+        { "id": 20, "type": "row", "title": "Collector: Retention", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 } },
+        {
+          "id": 21, "type": "timeseries", "title": "Day-Partitions Dropped",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+          "targets": [{ "expr": "rate(tracer_collector_retention_partitions_dropped_total[$__rate_interval])", "legendFormat": "dropped/s", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 22, "type": "timeseries", "title": "Retention Prune Duration (p50/p95)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(tracer_collector_retention_prune_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(tracer_collector_retention_prune_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+
+        { "id": 30, "type": "row", "title": "Collector: HTTP & Query API", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 } },
+        {
+          "id": 31, "type": "timeseries", "title": "HTTP Request Rate by Route",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+          "targets": [{ "expr": "sum by (route) (rate(tracer_collector_http_requests_total[$__rate_interval]))", "legendFormat": "{{route}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        },
+        {
+          "id": 32, "type": "timeseries", "title": "HTTP Request Latency (p50/p95/p99)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(tracer_collector_http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(tracer_collector_http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" },
+            { "expr": "histogram_quantile(0.99, sum by (le) (rate(tracer_collector_http_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 33, "type": "timeseries", "title": "Ad-hoc SQL Query Rate by Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "targets": [{ "expr": "sum by (result) (rate(tracer_collector_query_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 34, "type": "timeseries", "title": "Ad-hoc SQL Query Duration (p50/p95)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(tracer_collector_query_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(tracer_collector_query_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+
+        { "id": 40, "type": "row", "title": "Agent: Tailer & Batcher", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 } },
+        {
+          "id": 41, "type": "timeseries", "title": "Lines / Bytes Tailed",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+          "targets": [
+            { "expr": "sum(rate(tracer_agent_tailer_lines_total[$__rate_interval]))", "legendFormat": "lines/s", "refId": "A" },
+            { "expr": "sum(rate(tracer_agent_tailer_bytes_total[$__rate_interval]))", "legendFormat": "bytes/s", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [{ "matcher": { "id": "byName", "options": "bytes/s" }, "properties": [{ "id": "unit", "value": "Bps" }] }] }
+        },
+        {
+          "id": 42, "type": "timeseries", "title": "Rotations & Malformed Lines",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+          "targets": [
+            { "expr": "sum(rate(tracer_agent_tailer_rotations_total[$__rate_interval]))", "legendFormat": "rotations/s", "refId": "A" },
+            { "expr": "sum(rate(tracer_agent_tailer_malformed_lines_total[$__rate_interval]))", "legendFormat": "malformed/s", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 43, "type": "timeseries", "title": "Batches Flushed / Avg Batch Size",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 57 },
+          "targets": [
+            { "expr": "sum(rate(tracer_agent_batcher_batches_total[$__rate_interval]))", "legendFormat": "batches/s", "refId": "A" },
+            { "expr": "sum(rate(tracer_agent_batcher_entries_total[$__rate_interval])) / sum(rate(tracer_agent_batcher_batches_total[$__rate_interval]))", "legendFormat": "avg entries/batch", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+
+        { "id": 50, "type": "row", "title": "Agent: Forwarder", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 65 } },
+        {
+          "id": 51, "type": "timeseries", "title": "Send Attempts by Result",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 66 },
+          "targets": [{ "expr": "sum by (result) (rate(tracer_agent_forwarder_send_total[$__rate_interval]))", "legendFormat": "{{result}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+        },
+        {
+          "id": 52, "type": "timeseries", "title": "Ring Depth (unsent batches queued)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 66 },
+          "targets": [{ "expr": "sum(tracer_agent_forwarder_ring_depth)", "legendFormat": "queued", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 53, "type": "timeseries", "title": "Ring Drops (data loss — should be flat 0)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 74 },
+          "targets": [{ "expr": "sum(rate(tracer_agent_forwarder_ring_dropped_total[$__rate_interval]))", "legendFormat": "dropped/s", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.0001 }] },
+              "custom": { "thresholdsStyle": { "mode": "line" } }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 54, "type": "timeseries", "title": "Retry Backoff",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 74 },
+          "targets": [{ "expr": "tracer_agent_forwarder_backoff_seconds", "legendFormat": "backoff", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+
+        { "id": 60, "type": "row", "title": "Agent: Discovery & Checkpoint", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 82 } },
+        {
+          "id": 61, "type": "timeseries", "title": "Files Tracked (cumulative)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 83 },
+          "targets": [{ "expr": "tracer_agent_discovery_files_tracked", "legendFormat": "{{pod}}", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 62, "type": "timeseries", "title": "Checkpoint Flush Duration (p50/p95)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 83 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(tracer_agent_checkpoint_flush_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p50", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(tracer_agent_checkpoint_flush_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+
+        { "id": 70, "type": "row", "title": "Pod Resources (CPU & Memory)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 91 } },
+        {
+          "id": 71, "type": "timeseries", "title": "CPU Usage",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 92 },
+          "targets": [
+            { "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", pod=~\"tracer-(collector|agent)-.*\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "{{pod}}", "refId": "A" },
+            { "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"tracer-(collector|agent)-.*\", resource=\"cpu\"})", "legendFormat": "{{pod}} limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 72, "type": "timeseries", "title": "Memory Usage (tracer targets <512Mi for the collector)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 92 },
+          "targets": [
+            { "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"iresharma\", pod=~\"tracer-(collector|agent)-.*\", container!=\"\", container!=\"POD\"})", "legendFormat": "{{pod}}", "refId": "A" },
+            { "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"tracer-(collector|agent)-.*\", resource=\"memory\"})", "legendFormat": "{{pod}} limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+        }
+      ]
+    }
