@@ -1,3 +1,22 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seeksphere-core-api-dynamodb-local
+  namespace: iresharma
+  labels:
+    app: seeksphere-core-api-dynamodb-local
+spec:
+  # local-path (node-local), not nfs-csi-pve2 - DynamoDB Local's SQLite
+  # backing store needs reliable POSIX file locking that NFS doesn't
+  # provide, which previously surfaced as "unable to open database file"
+  # and requests hanging until read-timeout.
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,8 +26,11 @@ metadata:
     app: seeksphere-core-api-dynamodb-local
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate - this is a single-replica app with an RWO
+  # PVC, and RollingUpdate can deadlock since the new pod can't mount the
+  # volume until the old pod releases it.
   strategy:
-    type: RollingUpdate
+    type: Recreate
   selector:
     matchLabels:
       app: seeksphere-core-api-dynamodb-local
@@ -17,6 +39,28 @@ spec:
       labels:
         app: seeksphere-core-api-dynamodb-local
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        # local-path-provisioner creates the hostPath dir owned by root, and
+        # fsGroup isn't reliably applied to it on first creation, so fix
+        # ownership up front rather than relying on that (same pattern as
+        # variable-bitrate-server's PVC).
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /home/dynamodblocal/data
+              chown -R 1000:1000 /home/dynamodblocal/data
+          volumeMounts:
+            - name: data
+              mountPath: /home/dynamodblocal/data
+          securityContext:
+            runAsUser: 0
       containers:
         - name: dynamodb-local
           image: amazon/dynamodb-local:latest
@@ -26,20 +70,22 @@ spec:
           # `command`, which only overrides CMD), so `command` here would
           # try to exec "-jar" directly instead of passing it to java.
           #
-          # -inMemory (not -dbPath) - the previous RWO PVC was backed by
-          # nfs-csi-pve2, and DynamoDB Local's SQLite backing store doesn't
-          # work over NFS (no reliable POSIX file locking), which surfaced
-          # as "unable to open database file" and requests hanging until
-          # read-timeout. Data is local/dev-only, so trading persistence
-          # for a working store is the right tradeoff.
+          # -dbPath on a local-path PVC (node-local, not NFS) - -inMemory
+          # was a stopgap after nfs-csi-pve2 broke SQLite's file locking,
+          # but it wipes all data on every pod restart. local-path avoids
+          # the NFS locking problem while still persisting across restarts.
           args:
             - "-jar"
             - "DynamoDBLocal.jar"
             - "-sharedDb"
-            - "-inMemory"
+            - "-dbPath"
+            - "/home/dynamodblocal/data"
           ports:
             - name: http
               containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /home/dynamodblocal/data
           resources:
             requests:
               memory: 256Mi
@@ -59,6 +105,10 @@ spec:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seeksphere-core-api-dynamodb-local
 ---
 apiVersion: v1
 kind: Service
