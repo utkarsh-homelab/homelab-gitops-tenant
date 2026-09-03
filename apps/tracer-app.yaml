@@ -1,0 +1,288 @@
+# tracer: lightweight log/trace collector for the cluster itself.
+# Source: https://github.com/iresharma/tracer
+#
+# The agent runs in "api" ingestion mode here (a Deployment watching Pods
+# via the Kubernetes API + pods/log, no hostPath) — see the ServiceAccount
+# /Deployment block below for why, and homelab-infra-charts#1 for where
+# its RBAC actually lives.
+#
+# Images are built and pushed manually for now (no CI automation) — bump
+# the two `image:` tags below by hand when you cut a new build.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tracer-collector-config
+  namespace: iresharma
+data:
+  HTTP_ADDR: ":8080"
+  DB_PATH: "/data/tracer.db"
+  RETENTION_DAYS: "10"
+  TRACE_SEARCH_WINDOW_DAYS: "2"
+  SQLITE_CACHE_KB: "16000"
+  INGEST_CHAN_CAPACITY: "5000"
+  WRITER_FLUSH_MS: "200"
+  WRITER_FLUSH_SIZE: "500"
+---
+# local-path (node-local), not an NFS-backed class: SQLite needs reliable
+# POSIX file locking that NFS doesn't provide (same lesson as
+# seeksphere-core-api-dynamodb-local's PVC in this repo). Sizing rule of
+# thumb: bytes/day ~= lines/day * ~300 bytes/row; adjust `storage` to your
+# actual log volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tracer-collector-data
+  namespace: iresharma
+spec:
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+---
+# replicas is fixed at 1 with strategy Recreate: SQLite is single-writer /
+# single-instance storage, so two collector pods must never mount the RWO
+# PVC at the same time. Recreate guarantees the old pod is fully torn down
+# before the new one starts during a rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracer-collector
+  namespace: iresharma
+  labels:
+    app: tracer-collector
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tracer-collector
+  template:
+    metadata:
+      labels:
+        app: tracer-collector
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: collector
+          image: iresharma/tracer-collector:sha-23ae86f
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: tracer-collector-config
+          env:
+            - name: GOMEMLIMIT
+              value: "400MiB"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tracer-collector-data
+---
+# ClusterIP only, deliberately no Ingress: tracer's UI and JSON API
+# (including an ad-hoc read-only SQL query page against the log database)
+# have no authentication in front of them. Reach it with
+# `kubectl -n iresharma port-forward svc/tracer-collector 8080:80`, or add
+# your own authenticating Ingress if you want it reachable without a
+# port-forward.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracer-collector
+  namespace: iresharma
+spec:
+  type: ClusterIP
+  selector:
+    app: tracer-collector
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+# The collector serves /metrics on the same port as the UI/API (there's
+# only one HTTP server in the binary) — this ServiceMonitor scrapes the
+# existing "http" Service port rather than adding a redundant second one.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tracer-collector
+  namespace: iresharma
+  labels:
+    app: tracer-collector
+spec:
+  selector:
+    matchLabels:
+      app: tracer-collector
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tracer-agent-config
+  namespace: iresharma
+data:
+  COLLECTOR_URL: "http://tracer-collector.iresharma.svc.cluster.local"
+  TRACE_ID_FIELD: "trace_id"
+  INGESTION_MODE: "api"
+  # Purely a label on outgoing batches (api mode gets each line's real
+  # node from the Kubernetes API directly, per pod — this isn't used for
+  # that) — set so it reads as something meaningful rather than the
+  # "unknown-node" default if you ever look at collector-side batch logs.
+  NODE_NAME: "tracer-agent-api"
+  # WATCH_NAMESPACE left unset on purpose: the agent falls back to reading
+  # its own namespace from the in-cluster serviceaccount volume, and it
+  # would only ever be allowed to watch "iresharma" here anyway (see the
+  # Role below) — setting it explicitly would just be a second place this
+  # namespace name could go stale.
+  FLUSH_INTERVAL: "2s"
+  MAX_BATCH_SIZE: "500"
+  MAX_BATCH_BYTES: "524288"
+  RING_BUFFER_CAPACITY: "20"
+---
+# --- api-mode agent: no hostPath, needs RBAC instead --------------------
+#
+# The original design was a DaemonSet reading /var/log via hostPath — see
+# git history on this file. That got rejected outright: this namespace
+# enforces Pod Security "baseline", which disallows hostPath volumes
+# unconditionally, so every agent pod failed to schedule
+# ("forbidden: hostPath volumes").
+#
+# This is the replacement: the agent watches Pods in this namespace via
+# the Kubernetes API and streams each container's logs through the
+# pods/log subresource — the same mechanism `kubectl logs -f` uses. No
+# hostPath, so it passes "baseline" cleanly, and it only ever sees pods
+# already inside "iresharma" (tighter blast radius than the old hostPath
+# mount, which could technically read any tenant's logs on a node).
+#
+# The Role/RoleBinding granting this ServiceAccount get/list/watch on pods
+# and get on pods/log used to be defined right here, but the "iresharma"
+# tenant identity can't self-create RBAC objects
+# (`kubectl auth can-i create roles -n iresharma` → no — deliberate, so a
+# tenant can't self-escalate), so a copy of it in this repo could never
+# actually take effect. It's granted at the source instead, via
+# utkarsh-homelab/homelab-infra-charts (tenant-rbac chart,
+# serviceAccountRoles entry for "tracer-agent") — see
+# https://github.com/utkarsh-homelab/homelab-infra-charts/pull/1.
+#
+# Deployment, not DaemonSet: one process watching the whole namespace via
+# the API covers every pod in it regardless of which node it's on, so
+# there's no per-node replication to do here the way there was for
+# hostPath tailing.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+  labels:
+    app: tracer-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tracer-agent
+  template:
+    metadata:
+      labels:
+        app: tracer-agent
+    spec:
+      serviceAccountName: tracer-agent
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: agent
+          image: iresharma/tracer-agent:sha-23ae86f
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9091
+              name: metrics
+          envFrom:
+            - configMapRef:
+                name: tracer-agent-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+# The agent has no other Service (it only ever makes outbound calls to the
+# collector) — this one exists purely so Prometheus has something to
+# discover for metrics scraping.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+spec:
+  type: ClusterIP
+  selector:
+    app: tracer-agent
+  ports:
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tracer-agent
+  namespace: iresharma
+  labels:
+    app: tracer-agent
+spec:
+  selector:
+    matchLabels:
+      app: tracer-agent
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
