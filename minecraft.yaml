@@ -1,0 +1,339 @@
+# apps/minecraft.yaml
+#
+# Crafty Controller replaces itzg/minecraft-server + the old rcon-web-admin.
+# Crafty runs and owns the Java Minecraft process itself, and ships a modern
+# Vue-based web UI (console, file manager, backups, scheduling, player mgmt).
+#
+# IMPORTANT — this is NOT fully declarative like the old itzg setup:
+#   1. `kubectl apply` gets you a running Crafty *panel*, not a running world yet.
+#   2. Log into the panel (see Ingress host below), finish the first-run setup
+#      (it sets/shows an admin password on first boot — check pod logs if you
+#      don't see a prompt), then use "Create Server" to actually provision a
+#      Minecraft instance (version, type, memory, port, RCON password, etc.)
+#   3. Whatever port + RCON password you choose there needs to match the
+#      Service/exporter values below — placeholders are marked.
+#   4. This repo can't create Secrets, so create the RCON secret yourself,
+#      out of band, once you know the real password:
+#        kubectl create secret generic minecraft-rcon \
+#          --from-literal=RCON_PASSWORD='<password-you-set-in-crafty>' \
+#          -n iresharma
+#      ArgoCD only needs to reference it (secretKeyRef) — it never has to
+#      create/read it, so this stays compliant with the tenant restriction.
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crafty-data
+  namespace: iresharma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  # storageClassName: local-path   # uncomment/set if your cluster needs it
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crafty-controller
+  namespace: iresharma
+  labels:
+    app: crafty-controller
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # single Java process + single volume, never run two pods
+  selector:
+    matchLabels:
+      app: crafty-controller
+  template:
+    metadata:
+      labels:
+        app: crafty-controller
+    spec:
+      containers:
+        - name: crafty-controller
+          image: registry.gitlab.com/crafty-controller/crafty-4:latest
+          env:
+            - name: TZ
+              value: "Etc/UTC"
+          ports:
+            - containerPort: 8000
+              name: web-http
+            - containerPort: 8443
+              name: web-https
+            - containerPort: 25565
+              name: minecraft
+            - containerPort: 25575
+              name: rcon        # placeholder — must match the port you set in Crafty
+          volumeMounts:
+            - name: crafty-data
+              mountPath: /crafty/backups
+              subPath: backups
+            - name: crafty-data
+              mountPath: /crafty/logs
+              subPath: logs
+            - name: crafty-data
+              mountPath: /crafty/servers
+              subPath: servers
+            - name: crafty-data
+              mountPath: /crafty/app/config
+              subPath: config
+            - name: crafty-data
+              mountPath: /crafty/import
+              subPath: import
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1.5"
+              memory: "1.8Gi"   # leaves headroom under a small-memory node; raise if the world lags
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 45
+            periodSeconds: 20
+      volumes:
+        - name: crafty-data
+          persistentVolumeClaim:
+            claimName: crafty-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crafty-controller
+  namespace: iresharma
+spec:
+  selector:
+    app: crafty-controller
+  ports:
+    - name: web-http
+      port: 8000
+      targetPort: 8000
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+      protocol: TCP
+    - name: rcon
+      port: 25575
+      targetPort: 25575
+      protocol: TCP
+
+---
+# Web panel — plain HTTP Ingress via Traefik, per the repo's standard template
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: crafty-controller
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-iresh
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: minecraft-admin.iresharma.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crafty-controller
+                port:
+                  number: 8000
+  tls:
+    - hosts:
+        - minecraft-admin.iresharma.com
+      secretName: minecraft-admin-iresharma-tls
+
+---
+# Minecraft game port — raw TCP, so it goes through Traefik's IngressRouteTCP
+# rather than a normal Ingress. Minecraft's protocol isn't TLS, so this is a
+# plain (non-passthrough) TCP route matched on the dedicated "minecraft"
+# entrypoint. Swap `entryPoints` below to whatever you actually named it,
+# and swap the apiVersion group to traefik.containo.us/v1alpha1 if you're
+# still on Traefik v2 CRDs.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: minecraft-server
+  namespace: iresharma
+spec:
+  entryPoints:
+    - minecraft   # <-- must match your Traefik static config's TCP entrypoint name
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: crafty-controller
+          port: 25565
+
+---
+# Prometheus exporter — reads RCON stats (player counts, TPS, blocks mined,
+# deaths, etc). Update RCON_PORT below if you didn't keep the placeholder
+# 25575 when creating the server in Crafty, and create the minecraft-rcon
+# secret as described at the top of this file before this pod will connect.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft-exporter
+  namespace: iresharma
+  labels:
+    app: minecraft-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft-exporter
+  template:
+    metadata:
+      labels:
+        app: minecraft-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: minecraft-exporter
+          image: joshi425/minecraft_exporter:latest
+          env:
+            - name: RCON_HOST
+              value: "crafty-controller"
+            - name: RCON_PORT
+              value: "25575"
+            - name: RCON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minecraft-rcon
+                  key: RCON_PASSWORD
+            - name: HTTP_PORT
+              value: "8000"
+          ports:
+            - containerPort: 8000
+              name: metrics
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft-exporter
+  namespace: iresharma
+  labels:
+    app: minecraft-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+spec:
+  selector:
+    app: minecraft-exporter
+  ports:
+    - name: metrics
+      port: 8000
+      targetPort: 8000
+
+---
+# Grafana dashboard — the `grafana_dashboard: "1"` label is the default the
+# kube-prometheus-stack Grafana sidecar watches for (across all namespaces
+# by default). If your Grafana sidecar uses a different label/value, or only
+# watches specific namespaces, adjust or ask your infra admin to allow this one.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minecraft-grafana-dashboard
+  namespace: iresharma
+  labels:
+    grafana_dashboard: "1"
+data:
+  minecraft-server.json: |
+    {
+      "__inputs": [],
+      "title": "Minecraft Server",
+      "uid": "minecraft-server-iresharma",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {}
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Players Online",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            { "expr": "player_online", "refId": "A" }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Server TPS",
+          "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": { "defaults": { "min": 0, "max": 20 }, "overrides": [] },
+          "targets": [
+            { "expr": "overall_tps", "legendFormat": "TPS", "refId": "A" }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Blocks Mined (5m rate)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            { "expr": "sum(rate(blocks_mined[5m]))", "legendFormat": "blocks/s", "refId": "A" }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Player Deaths (5m rate)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            { "expr": "sum(rate(player_deaths[5m]))", "legendFormat": "deaths/s", "refId": "A" }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Damage Dealt vs Taken (5m rate)",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            { "expr": "sum(rate(damage_dealt[5m]))", "legendFormat": "dealt", "refId": "A" },
+            { "expr": "sum(rate(damage_taken[5m]))", "legendFormat": "taken", "refId": "B" }
+          ]
+        }
+      ]
+    }
