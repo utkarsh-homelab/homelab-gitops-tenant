@@ -10,8 +10,12 @@
 #      (it sets/shows an admin password on first boot — check pod logs if you
 #      don't see a prompt), then use "Create Server" to actually provision a
 #      Minecraft instance (version, type, memory, port, RCON password, etc.)
-#   3. Whatever port + RCON password you choose there needs to match the
-#      Service/exporter values below — placeholders are marked.
+#   3. This setup is pinned to a single server on game port 25565 and RCON
+#      port 25575 — set both exactly that way in Crafty's "Create Server"
+#      flow. (The RCON *password* is still whatever you choose there — it
+#      has no default, see step 4.) If you ever add a second server or need
+#      different ports, you'll need to update the Deployment/Service/
+#      IngressRouteTCP/exporter values below to match.
 #   4. This repo can't create Secrets, so create the RCON secret yourself,
 #      out of band, once you know the real password:
 #        kubectl create secret generic minecraft-rcon \
@@ -19,6 +23,16 @@
 #          -n iresharma
 #      ArgoCD only needs to reference it (secretKeyRef) — it never has to
 #      create/read it, so this stays compliant with the tenant restriction.
+#   5. The minecraft-exporter image hardcodes /world/stats, /world/playerdata
+#      and /world/advancements — it crashes (not just fails a scrape) if
+#      they're missing, because it reads them once at Prometheus collector
+#      registration time. Crafty stores each server's files under a
+#      per-server GUID (servers/<GUID>/... inside crafty-data) that only
+#      exists after you create the server in the UI, so once you've done
+#      that, find the world folder in Crafty's File Manager (default world
+#      name is "world" unless you changed level-name) and update the
+#      `subPath` on minecraft-exporter's "world" volumeMount below to
+#      `servers/<GUID>/world`, then restart the exporter pod.
 
 ---
 apiVersion: v1
@@ -68,7 +82,7 @@ spec:
             - containerPort: 25565
               name: minecraft
             - containerPort: 25575
-              name: rcon        # placeholder — must match the port you set in Crafty
+              name: rcon        # pinned — set RCON to this port in Crafty
           volumeMounts:
             - name: crafty-data
               mountPath: /crafty/backups
@@ -117,8 +131,8 @@ spec:
   selector:
     app: crafty-controller
   ports:
-    - name: web-http
-      port: 8000
+    - name: http
+      port: 80
       targetPort: 8000
     - name: minecraft
       port: 25565
@@ -150,7 +164,7 @@ spec:
               service:
                 name: crafty-controller
                 port:
-                  number: 8000
+                  number: 80
   tls:
     - hosts:
         - minecraft-admin.iresharma.com
@@ -179,8 +193,8 @@ spec:
 
 ---
 # Prometheus exporter — reads RCON stats (player counts, TPS, blocks mined,
-# deaths, etc). Update RCON_PORT below if you didn't keep the placeholder
-# 25575 when creating the server in Crafty, and create the minecraft-rcon
+# deaths, etc). Assumes RCON is on 25575 in Crafty (see note 3 at the top) —
+# update RCON_PORT below if you changed that, and create the minecraft-rcon
 # secret as described at the top of this file before this pod will connect.
 apiVersion: apps/v1
 kind: Deployment
@@ -221,6 +235,16 @@ spec:
           ports:
             - containerPort: 8000
               name: metrics
+          volumeMounts:
+            - name: world
+              mountPath: /world
+              readOnly: true
+              # PLACEHOLDER — subPath can't be templated. Update to
+              # servers/<GUID>/world once you've created the server in
+              # Crafty's UI and found its GUID (see note 5 above); until
+              # then this path doesn't exist and the exporter pod will
+              # crash with FileNotFoundError.
+              subPath: servers/CHANGE-ME-server-guid/world
           resources:
             requests:
               cpu: "50m"
@@ -228,6 +252,11 @@ spec:
             limits:
               cpu: "200m"
               memory: "128Mi"
+      volumes:
+        - name: world
+          persistentVolumeClaim:
+            claimName: crafty-data
+            readOnly: true
 
 ---
 apiVersion: v1
