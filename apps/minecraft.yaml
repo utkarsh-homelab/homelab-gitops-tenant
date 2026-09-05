@@ -184,34 +184,37 @@ spec:
     passthrough: true
 
 ---
-# Minecraft game port — raw TCP, so it goes through Traefik's IngressRouteTCP
-# rather than a normal Ingress. Minecraft's protocol isn't TLS (unlike the
-# panel above), so this can't share the websecure entrypoint via SNI — it
-# needs its own dedicated TCP entrypoint/port bound in Traefik's static
-# config, matched by `entryPoints` below.
+# Minecraft game port — a dedicated LoadBalancer Service (MetalLB assigns
+# it its own external IP), bypassing Traefik entirely for raw TCP.
 #
-# CONFIRMED BROKEN as of 2026-09-05: this cluster's Traefik only has
-# metrics/traefik/web/websecure entrypoints configured (checked via
-# `kubectl get deployment -n traefik traefik -o jsonpath='{.spec.template.spec.containers[0].args}'`)
-# — there is no "minecraft" entrypoint, so this route currently does
-# nothing and no Minecraft client can connect. This is infra-level Traefik
-# config (a new --entryPoints.minecraft.address=:<port>/tcp on the Traefik
-# Deployment/Helm values, likely also needing a port opened on its
-# LoadBalancer Service), outside this tenant repo's reach — get your
-# cluster admin to add it, then this route will start working as-is.
-apiVersion: traefik.io/v1alpha1
-kind: IngressRouteTCP
+# Originally this went through a Traefik IngressRouteTCP on a "minecraft"
+# TCP entrypoint, but that entrypoint doesn't exist in this cluster's
+# Traefik static config (confirmed 2026-09-05 via `kubectl get deployment
+# -n traefik traefik -o jsonpath='{.spec.template.spec.containers[0].args}'`
+# — only metrics/traefik/web/websecure are configured), so that route was
+# a permanent no-op. Minecraft's protocol isn't TLS, so it can't share the
+# websecure entrypoint via SNI passthrough the way the panel above does
+# either. This LoadBalancer Service sidesteps Traefik altogether instead
+# of waiting on a cluster-admin change to add a new entrypoint.
+#
+# Find the assigned external IP with:
+#   kubectl get svc -n iresharma minecraft-server-lb
+# and connect your Minecraft client to <that IP>:25565 (or point a DNS
+# record at it, e.g. minecraft.iresharma.com).
+apiVersion: v1
+kind: Service
 metadata:
-  name: minecraft-server
+  name: minecraft-server-lb
   namespace: iresharma
 spec:
-  entryPoints:
-    - minecraft   # <-- must match your Traefik static config's TCP entrypoint name
-  routes:
-    - match: HostSNI(`*`)
-      services:
-        - name: crafty-controller
-          port: 25565
+  type: LoadBalancer
+  selector:
+    app: crafty-controller
+  ports:
+    - name: minecraft
+      port: 25565
+      targetPort: 25565
+      protocol: TCP
 
 ---
 # Prometheus exporter — reads RCON stats (player counts, TPS, blocks mined,
