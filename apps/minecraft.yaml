@@ -127,14 +127,6 @@ kind: Service
 metadata:
   name: crafty-controller
   namespace: iresharma
-  annotations:
-    # Crafty only speaks HTTPS (self-signed cert) on this port, so tell
-    # Traefik to re-encrypt to the backend instead of sending plain HTTP —
-    # otherwise the panel is unreachable ("no available server").
-    # insecureSkipVerify is required because the cert is self-signed; see
-    # the crafty-backend-tls ServersTransport below.
-    traefik.ingress.kubernetes.io/service.serversscheme: https
-    traefik.ingress.kubernetes.io/service.serverstransport: crafty-backend-tls@kubernetescrd
 spec:
   selector:
     app: crafty-controller
@@ -152,53 +144,53 @@ spec:
       protocol: TCP
 
 ---
-# Traefik re-encrypts to Crafty's self-signed backend cert (see the Service
-# annotations above) instead of verifying it — this is what that requires.
+# Web panel — TLS passthrough via IngressRouteTCP, matched by SNI on
+# Traefik's existing "websecure" entrypoint (the same one every other app's
+# terminated-HTTPS Ingress uses — SNI passthrough can share an entrypoint
+# with normal terminated routing). Chosen over a cert-manager Ingress
+# because Crafty is HTTPS-only with a self-signed cert (no plain-HTTP
+# mode), and re-encrypting to it via a ServersTransport CRD reference
+# reproducibly broke routing entirely on this cluster (confirmed
+# 2026-09-05: adding traefik.ingress.kubernetes.io/service.serverstransport
+# to the Service made Traefik 404 the whole route, even though
+# --providers.kubernetescrd watches all namespaces — root cause unresolved
+# without Traefik log access, which this tenant doesn't have).
+#
+# Trade-off: your browser negotiates TLS directly with Crafty, so it'll
+# show a self-signed-cert warning once (click through / trust it), unlike
+# every other app here which gets a real cert-manager-issued cert.
 apiVersion: traefik.io/v1alpha1
-kind: ServersTransport
+kind: IngressRouteTCP
 metadata:
-  name: crafty-backend-tls
+  name: crafty-controller-panel
   namespace: iresharma
 spec:
-  insecureSkipVerify: true
-
----
-# Web panel Ingress via Traefik. cert-manager issues the real edge cert
-# clients see; Traefik then re-encrypts to Crafty's own self-signed HTTPS
-# on 8443 (Crafty has no plain-HTTP mode) — see the Service annotations
-# and the ServersTransport above.
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: crafty-controller
-  namespace: iresharma
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod-iresh
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: minecraft-admin.iresharma.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: crafty-controller
-                port:
-                  number: 8443
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostSNI(`minecraft-admin.iresharma.com`)
+      services:
+        - name: crafty-controller
+          port: 8443
   tls:
-    - hosts:
-        - minecraft-admin.iresharma.com
-      secretName: minecraft-admin-iresharma-tls
+    passthrough: true
 
 ---
 # Minecraft game port — raw TCP, so it goes through Traefik's IngressRouteTCP
-# rather than a normal Ingress. Minecraft's protocol isn't TLS, so this is a
-# plain (non-passthrough) TCP route matched on the dedicated "minecraft"
-# entrypoint. Swap `entryPoints` below to whatever you actually named it,
-# and swap the apiVersion group to traefik.containo.us/v1alpha1 if you're
-# still on Traefik v2 CRDs.
+# rather than a normal Ingress. Minecraft's protocol isn't TLS (unlike the
+# panel above), so this can't share the websecure entrypoint via SNI — it
+# needs its own dedicated TCP entrypoint/port bound in Traefik's static
+# config, matched by `entryPoints` below.
+#
+# CONFIRMED BROKEN as of 2026-09-05: this cluster's Traefik only has
+# metrics/traefik/web/websecure entrypoints configured (checked via
+# `kubectl get deployment -n traefik traefik -o jsonpath='{.spec.template.spec.containers[0].args}'`)
+# — there is no "minecraft" entrypoint, so this route currently does
+# nothing and no Minecraft client can connect. This is infra-level Traefik
+# config (a new --entryPoints.minecraft.address=:<port>/tcp on the Traefik
+# Deployment/Helm values, likely also needing a port opened on its
+# LoadBalancer Service), outside this tenant repo's reach — get your
+# cluster admin to add it, then this route will start working as-is.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRouteTCP
 metadata:
