@@ -105,7 +105,15 @@ spec:
               memory: "1Gi"
             limits:
               cpu: "1"          # tenant LimitRange caps a single container at 1 CPU
-              memory: "1.8Gi"   # leaves headroom under a small-memory node; raise if the world lags
+              # Crafty runs the Java Minecraft process *inside this same
+              # container*, alongside its own Python panel. Whatever Java
+              # heap ("Max Memory") you set for a server in Crafty needs
+              # real headroom above this limit for JVM off-heap/metaspace
+              # plus Crafty's own overhead, or the container gets OOMKilled.
+              # 3Gi here comfortably covers a 2GB Java heap; if you raise
+              # Max Memory in Crafty, raise this too (LimitRange caps a
+              # single container at 4Gi).
+              memory: "3Gi"
           readinessProbe:
             tcpSocket:
               port: 8443
