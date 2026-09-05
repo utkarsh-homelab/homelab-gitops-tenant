@@ -104,7 +104,7 @@ spec:
               cpu: "500m"
               memory: "1Gi"
             limits:
-              cpu: "1.5"
+              cpu: "1"          # tenant LimitRange caps a single container at 1 CPU
               memory: "1.8Gi"   # leaves headroom under a small-memory node; raise if the world lags
           readinessProbe:
             tcpSocket:
