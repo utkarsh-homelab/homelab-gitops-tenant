@@ -196,6 +196,12 @@ spec:
 # deaths, etc). Assumes RCON is on 25575 in Crafty (see note 3 at the top) —
 # update RCON_PORT below if you changed that, and create the minecraft-rcon
 # secret as described at the top of this file before this pod will connect.
+#
+# replicas is 0 until the server actually exists in Crafty: the "world"
+# volumeMount below is read-only, so if its subPath directory doesn't exist
+# yet, kubelet can't auto-create it and the pod fails outright at mount time
+# (rather than just crashing once running). Once you've created the server,
+# set the real subPath (note 5 above) AND bump replicas back to 1.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -204,7 +210,7 @@ metadata:
   labels:
     app: minecraft-exporter
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: minecraft-exporter
