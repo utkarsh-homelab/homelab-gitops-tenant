@@ -1,0 +1,191 @@
+# pr-agent: The-PR-Agent/pr-agent's GitHub App webhook server — auto-reviews
+# and auto-describes PRs on every repo where the GitHub App gets installed.
+# Source: https://github.com/The-PR-Agent/pr-agent
+#
+# This repo can't create Secrets, and this app fundamentally needs three of
+# them (a GitHub App private key, a webhook secret, an Anthropic API key) —
+# so unlike most apps here, `kubectl apply`-ing this file alone does NOT get
+# you a working deployment. Three manual steps first:
+#
+# 1) Create a GitHub App (https://github.com/settings/apps/new — this has to
+#    be done in the browser, it isn't scriptable):
+#      - Homepage URL: https://pr-agent.iresharma.com (anything works, unused)
+#      - Webhook URL: https://pr-agent.iresharma.com/api/v1/github_webhooks
+#      - Webhook secret: generate one now and save it —
+#          python3 -c "import secrets; print(secrets.token_hex(10))"
+#      - Permissions: Pull requests (Read & write), Issue comment
+#        (Read & write), Metadata (Read-only), Contents (Read-only)
+#      - Subscribe to events: Issue comment, Pull request, Pull request
+#        review, Pull request review comment
+#      - After creating it: note the App ID (top of the app's settings page),
+#        and click "Generate a private key" to download a .pem file.
+#    Then, from the app's "Install App" tab, install it on whichever repos
+#    you want PR-Agent reviewing.
+#
+# 2) Build the `.secrets.toml` PR-Agent expects, filling in the three values
+#    from step 1 plus your Anthropic key (https://console.anthropic.com/settings/keys):
+#
+#      cat > /tmp/.secrets.toml <<'EOF'
+#      [anthropic]
+#      key = "sk-ant-..."
+#
+#      [github]
+#      app_id = 123456
+#      webhook_secret = "the-hex-string-from-step-1"
+#      private_key = """\
+#      -----BEGIN RSA PRIVATE KEY-----
+#      ...paste the downloaded .pem contents here...
+#      -----END RSA PRIVATE KEY-----
+#      """
+#      EOF
+#
+# 3) Create the Secret out-of-band (this is the one command that has to be
+#    run by hand, outside this repo — ArgoCD only ever reads it via
+#    secretKeyRef below, never creates it):
+#
+#      kubectl create secret generic pr-agent-settings \
+#        --from-file=.secrets.toml=/tmp/.secrets.toml \
+#        -n iresharma
+#      rm /tmp/.secrets.toml
+#
+# Whenever you rotate the webhook secret, GitHub App key, or OpenAI key,
+# re-run step 3 with `kubectl create secret ... -o yaml --dry-run=client |
+# kubectl replace -f -` (or delete + recreate) and roll the deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pr-agent-config
+  namespace: iresharma
+data:
+  # Two async UvicornWorkers is deliberately below the image's own default
+  # (4) — this is homelab hardware and each worker forks the whole pr_agent
+  # import (litellm alone is ~150MB), so this keeps the container inside the
+  # memory limit below. Bump both this and the memory limit together if you
+  # see OOMKills under load. See the image's own sizing notes:
+  # https://github.com/The-PR-Agent/pr-agent/blob/main/docs/docs/installation/index.md#sizing-a-self-hosted-webhook-server
+  GUNICORN_MAX_WORKERS: "2"
+  # Not a secret — routes model calls to Claude instead of the OpenAI
+  # default. Dynaconf's env loader maps CONFIG__X to the [config] section's
+  # X key (double underscore = nested-key separator, since env var names
+  # can't contain dots); FALLBACK_MODELS is a JSON-array string because
+  # dynaconf parses env values as JSON/TOML literals.
+  CONFIG__MODEL: "anthropic/claude-sonnet-5"
+  CONFIG__FALLBACK_MODELS: '["anthropic/claude-haiku-4-5-20251001"]'
+---
+# Single replica, no PVC — PR-Agent is stateless (every request re-fetches
+# whatever it needs from the GitHub API), so there's no Recreate/RWO
+# consideration here the way there is for tracer/crafty in this repo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-agent
+  namespace: iresharma
+  labels:
+    app: pr-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pr-agent
+  template:
+    metadata:
+      labels:
+        app: pr-agent
+    spec:
+      containers:
+        - name: pr-agent
+          # Pinned to a version tag, not the `github_app` rolling tag: per
+          # the image's own docs, rolling tags move to the newest build on
+          # every release, so a version tag is the only reproducible choice.
+          image: pragent/pr-agent:0.45.0-github_app
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: pr-agent-config
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            # This is the image's own documented pattern for injecting
+            # secrets in Kubernetes (see docs/docs/installation/github.md,
+            # "Run as a GitHub App" step 5) — settings_prod is scanned
+            # alongside the baked-in defaults, so this one file supplies
+            # openai.key, github.app_id, github.private_key and
+            # github.webhook_secret without any of them touching this repo.
+            - name: settings-volume
+              mountPath: /app/pr_agent/settings_prod
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 800m
+              memory: 1Gi
+          # GET / returns {"status":"ok"} unauthenticated — see
+          # pr_agent/servers/github_app.py's `root()` handler.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
+      volumes:
+        - name: settings-volume
+          secret:
+            # Created out-of-band per the instructions at the top of this
+            # file — not managed by this repo.
+            secretName: pr-agent-settings
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-agent
+  namespace: iresharma
+spec:
+  type: ClusterIP
+  selector:
+    app: pr-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+---
+# GitHub's webhook deliveries hit this over the public internet, so unlike
+# tracer this deliberately does get an Ingress. The webhook signature
+# (github.webhook_secret) is what actually authenticates requests — there's
+# no separate auth in front of it here.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pr-agent
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-iresh
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: pr-agent.iresharma.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pr-agent
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - pr-agent.iresharma.com
+      secretName: pr-agent-iresharma-tls
