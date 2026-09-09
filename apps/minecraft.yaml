@@ -184,36 +184,25 @@ spec:
     passthrough: true
 
 ---
-# Minecraft game port — a dedicated LoadBalancer Service (MetalLB assigns
-# it its own external IP), bypassing Traefik entirely for raw TCP.
+# Minecraft game port — Exposed using a dedicated NodePort Service 
+# to bypass the virtual LoadBalancer routing layer.
 #
-# Originally this went through a Traefik IngressRouteTCP on a "minecraft"
-# TCP entrypoint, but that entrypoint doesn't exist in this cluster's
-# Traefik static config (confirmed 2026-09-05 via `kubectl get deployment
-# -n traefik traefik -o jsonpath='{.spec.template.spec.containers[0].args}'`
-# — only metrics/traefik/web/websecure are configured), so that route was
-# a permanent no-op. Minecraft's protocol isn't TLS, so it can't share the
-# websecure entrypoint via SNI passthrough the way the panel above does
-# either. This LoadBalancer Service sidesteps Traefik altogether instead
-# of waiting on a cluster-admin change to add a new entrypoint.
-#
-# Find the assigned external IP with:
-#   kubectl get svc -n iresharma minecraft-server-lb
-# and connect your Minecraft client to <that IP>:25565 (or point a DNS
-# record at it, e.g. minecraft.iresharma.com).
+# Connect your Minecraft client directly using your physical 
+# Kubernetes Node IP combined with port 30089 (e.g. <NODE_IP>:30089).
 apiVersion: v1
 kind: Service
 metadata:
-  name: minecraft-server-lb
+  name: minecraft-server-nodeport
   namespace: iresharma
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: crafty-controller
   ports:
     - name: minecraft
       port: 25565
       targetPort: 25565
+      nodePort: 30089
       protocol: TCP
 
 ---
