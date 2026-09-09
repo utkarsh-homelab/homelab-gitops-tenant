@@ -192,17 +192,16 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: minecraft-server-nodeport
+  name: minecraft-server-lb
   namespace: iresharma
 spec:
-  type: NodePort
+  type: LoadBalancer  
   selector:
     app: crafty-controller
   ports:
     - name: minecraft
       port: 25565
       targetPort: 25565
-      nodePort: 30125
       protocol: TCP
 
 ---
