@@ -1,0 +1,145 @@
+# pr-agent doesn't expose an app-level /metrics endpoint (unlike
+# tracer/lens-distill in this repo) — its own OTel metrics pipeline only
+# supports "console" or "otlp" export, is disabled by default, and this
+# cluster has no OTel Collector or Prometheus OTLP receiver to catch an
+# otlp push even if enabled. So every panel below is built from the
+# generic cAdvisor/kube-state-metrics series Prometheus already scrapes
+# for every pod — pod health and resource usage, not review counts,
+# latency, or LLM cost. If real usage metrics matter later, the actual
+# fix is asking whoever has cluster-admin to stand up a collector (or
+# turn on Prometheus's OTLP receiver) — that's infra-namespace territory
+# this tenant can't reach.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pr-agent-dashboard
+  namespace: iresharma
+  labels:
+    # Picked up by the shared kube-prometheus-stack Grafana sidecar
+    # (searchNamespace: ALL), which imports any ConfigMap carrying this
+    # label as a dashboard - see charts/kube-prometheus-stack/values/prod.yaml
+    # in homelab-infra-charts.
+    grafana_dashboard: "1"
+data:
+  pr-agent.json: |-
+    {
+      "title": "PR-Agent",
+      "uid": "pr-agent",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "graphTooltip": 1,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "tags": ["pr-agent", "github-app"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Prometheus",
+            "current": {}
+          }
+        ]
+      },
+      "panels": [
+        { "id": 1, "type": "row", "title": "Overview", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+        {
+          "id": 2, "type": "stat", "title": "Pod Ready",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "targets": [{ "expr": "sum(kube_pod_status_ready{namespace=\"iresharma\", pod=~\"pr-agent-.*\", condition=\"true\"})", "legendFormat": "ready", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "type": "stat", "title": "Restarts (total)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "targets": [{ "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"iresharma\", pod=~\"pr-agent-.*\"})", "legendFormat": "restarts", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 4, "type": "gauge", "title": "CPU Usage % of Limit (300m)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "targets": [{ "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", pod=~\"pr-agent-.*\", container!=\"\", container!=\"POD\"}[$__rate_interval])) / sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"pr-agent-.*\", resource=\"cpu\"})", "legendFormat": "cpu %", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 5, "type": "gauge", "title": "Memory Usage % of Limit (1Gi)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "targets": [{ "expr": "100 * sum(container_memory_working_set_bytes{namespace=\"iresharma\", pod=~\"pr-agent-.*\", container!=\"\", container!=\"POD\"}) / sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"pr-agent-.*\", resource=\"memory\"})", "legendFormat": "memory %", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] }
+            },
+            "overrides": []
+          }
+        },
+
+        { "id": 10, "type": "row", "title": "Resource Usage Over Time", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 } },
+        {
+          "id": 11, "type": "timeseries", "title": "CPU Usage vs Limit (cores)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+          "targets": [
+            { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"iresharma\", pod=~\"pr-agent-.*\", container!=\"\", container!=\"POD\"}[$__rate_interval]))", "legendFormat": "used", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"pr-agent-.*\", resource=\"cpu\"})", "legendFormat": "limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Memory Usage vs Limit",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+          "targets": [
+            { "expr": "sum(container_memory_working_set_bytes{namespace=\"iresharma\", pod=~\"pr-agent-.*\", container!=\"\", container!=\"POD\"})", "legendFormat": "used", "refId": "A" },
+            { "expr": "sum(kube_pod_container_resource_limits{namespace=\"iresharma\", pod=~\"pr-agent-.*\", resource=\"memory\"})", "legendFormat": "limit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+        },
+
+        { "id": 20, "type": "row", "title": "Network (proxy for webhook traffic)", "collapsed": false, "panels": [], "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 } },
+        {
+          "id": 21, "type": "timeseries", "title": "Receive / Transmit Rate",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+          "targets": [
+            { "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"iresharma\", pod=~\"pr-agent-.*\"}[$__rate_interval]))", "legendFormat": "receive", "refId": "A" },
+            { "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"iresharma\", pod=~\"pr-agent-.*\"}[$__rate_interval]))", "legendFormat": "transmit", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+        },
+        {
+          "id": 22, "type": "timeseries", "title": "Pod Age (uptime since last restart)",
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+          "targets": [{ "expr": "time() - max(kube_pod_start_time{namespace=\"iresharma\", pod=~\"pr-agent-.*\"})", "legendFormat": "uptime", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        }
+      ]
+    }
