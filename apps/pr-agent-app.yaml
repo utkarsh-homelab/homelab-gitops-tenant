@@ -120,11 +120,23 @@ spec:
             capabilities:
               drop: ["ALL"]
           resources:
+            # cpu limit is pinned to the last 300m of headroom, not a sizing
+            # choice: tenant-resource-quota caps limits.cpu at 4 cores
+            # cluster-wide, and every other app in this namespace already
+            # consumes 3700m of that (confirmed 2026-09-10 via `kubectl
+            # describe resourcequota tenant-resource-quota -n iresharma`).
+            # 800m (the original guess) made every pod create fail with
+            # `exceeded quota: ... limited: limits.cpu=4`. This is an
+            # async, I/O-bound webhook server (waiting on the GitHub and
+            # Anthropic APIs, not doing heavy local compute), so throttling
+            # under 300m should mean slower reviews rather than failures —
+            # but if that's not true in practice, freeing CPU quota
+            # elsewhere is the real fix, not raising this further.
             requests:
-              cpu: 200m
+              cpu: 100m
               memory: 512Mi
             limits:
-              cpu: 800m
+              cpu: 300m
               memory: 1Gi
           # GET / returns {"status":"ok"} unauthenticated — see
           # pr_agent/servers/github_app.py's `root()` handler.
