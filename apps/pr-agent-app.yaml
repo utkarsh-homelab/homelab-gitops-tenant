@@ -73,8 +73,18 @@ data:
   CONFIG__FALLBACK_MODELS: '["anthropic/claude-haiku-4-5-20251001"]'
 ---
 # Single replica, no PVC — PR-Agent is stateless (every request re-fetches
-# whatever it needs from the GitHub API), so there's no Recreate/RWO
+# whatever it needs from the GitHub API), so there's no RWO-volume
 # consideration here the way there is for tracer/crafty in this repo.
+#
+# strategy.type is Recreate, not the apps/v1 default RollingUpdate, because
+# tenant-resource-quota's limits.cpu is fully saturated at 4/4 with just
+# this one replica running (confirmed 2026-09-10) — RollingUpdate's default
+# 25% max surge needs a second pod's 300m to exist briefly alongside the
+# old one, which the quota can never grant. Recreate kills the old pod
+# before creating the new one instead, so only one pod's worth of quota is
+# ever requested at a time. Every future rollout of this Deployment
+# (image bump, secret rotation + restart) depends on this staying set —
+# removing it reproduces this exact stuck-rollout failure.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -84,6 +94,8 @@ metadata:
     app: pr-agent
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: pr-agent
