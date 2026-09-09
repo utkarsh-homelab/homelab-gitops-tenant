@@ -71,6 +71,17 @@ data:
   # dynaconf parses env values as JSON/TOML literals.
   CONFIG__MODEL: "anthropic/claude-sonnet-5"
   CONFIG__FALLBACK_MODELS: '["anthropic/claude-haiku-4-5-20251001"]'
+  # PR-Agent's own shipped default (32000) caps every review at 32k tokens
+  # "regardless of the model's default capabilities" (their comment, not
+  # ours) — a leftover from when 32k was a typical GPT-4-class context
+  # window. claude-sonnet-5 is registered in PR-Agent's own model table
+  # with a 1,000,000-token window, so that default was silently truncating
+  # large PRs (confirmed 2026-09-09: dozens of files logged as "insufficient
+  # token budget to process" and dropped from the review entirely).
+  # 128000 covers most real-world PRs with real headroom to spare; if you
+  # still see files getting dropped, raise this further (up to 1000000)
+  # but expect cost and per-review latency to scale roughly with it.
+  CONFIG__MAX_MODEL_TOKENS: "128000"
 ---
 # Single replica, no PVC — PR-Agent is stateless (every request re-fetches
 # whatever it needs from the GitHub API), so there's no RWO-volume
