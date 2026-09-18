@@ -1,819 +1,570 @@
-# Grafana sidecar ConfigMap for kube-prometheus-stack.
-# Drop this into homelab-infra-charts (pushgateway chart templates, or any
-# ArgoCD app that syncs into a namespace the Grafana sidecar watches).
-#
-# Sidecar settings already in kube-prometheus-stack values:
-#   grafana.sidecar.dashboards.enabled: true
-#   grafana.sidecar.dashboards.label: grafana_dashboard
-#   grafana.sidecar.dashboards.labelValue: "1"
-#   grafana.sidecar.dashboards.searchNamespace: ALL
-#
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-engine-run-benchmarks
-  namespace: monitoring
+  name: engine-dashboard
+  namespace: iresharma
   labels:
+    # Picked up by the shared kube-prometheus-stack Grafana sidecar
+    # (searchNamespace: ALL), which imports any ConfigMap carrying this
+    # label as a dashboard - see charts/kube-prometheus-stack/values/prod.yaml
+    # in homelab-infra-charts.
     grafana_dashboard: "1"
-  annotations:
-    grafana_folder: Engine
 data:
-  engine-pushgateway.json: |-
+  engine.json: |-
     {
-      "annotations": {
+      "title": "Engine Run Benchmarks",
+      "uid": "engine-run-benchmarks",
+      "schemaVersion": 39,
+      "version": 1,
+      "editable": true,
+      "graphTooltip": 1,
+      "timezone": "browser",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "refresh": "30s",
+      "tags": [
+        "engine",
+        "codeloom",
+        "pushgateway"
+      ],
+      "description": "Codeloom engine run + TypeSafe System One metrics from Prometheus Pushgateway. Default grouping is job=engine, instance=session_id. Gauges are per-session totals retained until the grouping key is deleted. Histogram p95 uses rate() and is meaningful while a session is still pushing.",
+      "templating": {
         "list": [
           {
-            "builtIn": 1,
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "label": "Prometheus",
+            "current": {}
+          },
+          {
+            "name": "job",
+            "type": "query",
+            "label": "Job",
             "datasource": {
-              "type": "grafana",
-              "uid": "-- Grafana --"
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
             },
-            "enable": true,
-            "hide": true,
-            "iconColor": "rgba(0, 211, 255, 1)",
-            "name": "Annotations & Alerts",
-            "type": "dashboard"
+            "query": "label_values(engine_run_info, job)",
+            "definition": "label_values(engine_run_info, job)",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 2,
+            "sort": 1,
+            "current": {}
+          },
+          {
+            "name": "instance",
+            "type": "query",
+            "label": "Session",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values(engine_run_info{job=~\"$job\"}, instance)",
+            "definition": "label_values(engine_run_info{job=~\"$job\"}, instance)",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 2,
+            "sort": 1,
+            "current": {}
+          },
+          {
+            "name": "model",
+            "type": "query",
+            "label": "Model",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values(engine_model_requests{job=~\"$job\"}, model)",
+            "definition": "label_values(engine_model_requests{job=~\"$job\"}, model)",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 2,
+            "sort": 1,
+            "current": {}
+          },
+          {
+            "name": "profile",
+            "type": "query",
+            "label": "Profile",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values(engine_agent_spawned{job=~\"$job\"}, profile)",
+            "definition": "label_values(engine_agent_spawned{job=~\"$job\"}, profile)",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 2,
+            "sort": 1,
+            "current": {}
+          },
+          {
+            "name": "tag",
+            "type": "query",
+            "label": "Judge tag",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "query": "label_values(engine_judge_requests{job=~\"$job\"}, tag)",
+            "definition": "label_values(engine_judge_requests{job=~\"$job\"}, tag)",
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 2,
+            "sort": 1,
+            "current": {}
           }
         ]
       },
-      "description": "Codeloom engine run + TypeSafe System One metrics from Prometheus Pushgateway. Default grouping is job=engine, instance=session_id. Gauges are per-session totals retained until the grouping key is deleted. Histogram p95 uses rate() and is meaningful while a session is still pushing.",
-      "editable": true,
-      "fiscalYearStartMonth": 0,
-      "graphTooltip": 1,
-      "links": [],
-      "liveNow": false,
       "panels": [
         {
+          "id": 1,
+          "type": "row",
+          "title": "Overview",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 0
-          },
-          "id": 1,
-          "panels": [],
-          "title": "Overview",
-          "type": "row"
+          }
         },
         {
+          "id": 2,
+          "type": "stat",
+          "title": "Sessions",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 0,
             "y": 1
           },
-          "id": 2,
-          "title": "Sessions",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "count(engine_run_info{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "count(engine_run_info{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 3,
+          "type": "stat",
+          "title": "LLM cost",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 3,
             "y": 1
           },
-          "id": 3,
-          "title": "LLM cost",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "currencyUSD",
               "decimals": 2
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 4,
+          "type": "stat",
+          "title": "LLM tokens",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 6,
             "y": 1
           },
-          "id": 4,
-          "title": "LLM tokens",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 5,
+          "type": "stat",
+          "title": "LLM requests",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 9,
             "y": 1
           },
-          "id": 5,
-          "title": "LLM requests",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_requests{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_requests{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 6,
+          "type": "stat",
+          "title": "LLM turns",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 12,
             "y": 1
           },
-          "id": 6,
-          "title": "LLM turns",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_llm_turns{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_llm_turns{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 7,
+          "type": "stat",
+          "title": "Files unique",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 15,
             "y": 1
           },
-          "id": 7,
-          "title": "Files unique",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_files_unique{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_files_unique{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 8,
+          "type": "stat",
+          "title": "Agents spawned",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 18,
             "y": 1
           },
-          "id": 8,
-          "title": "Agents spawned",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_agents_spawned{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_agents_spawned{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 9,
+          "type": "stat",
+          "title": "Agents live",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 3,
             "x": 21,
             "y": 1
           },
-          "id": 9,
-          "title": "Agents live",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_run_agents_live{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_run_agents_live{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 10,
+          "type": "row",
+          "title": "Sessions",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 5
-          },
-          "id": 10,
-          "panels": [],
-          "title": "Sessions",
-          "type": "row"
+          }
         },
         {
+          "id": 11,
+          "type": "table",
+          "title": "Retained sessions (Pushgateway grouping key = instance)",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Each Pushgateway group is one engine session. Values stay until that grouping key is deleted. instance is session_id when honorLabels is true.",
           "gridPos": {
             "h": 10,
             "w": 24,
             "x": 0,
             "y": 6
           },
-          "id": 11,
-          "title": "Retained sessions (Pushgateway grouping key = instance)",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "inspect": false
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "cellHeight": "sm",
-            "footer": {
-              "countRows": false,
-              "fields": "",
-              "reducer": [
-                "sum"
-              ],
-              "show": false
-            },
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "llm_cost_usd"
-              }
-            ]
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_info{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "A",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_cost_usd{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "B",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "C",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_requests{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "D",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_llm_turns{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "E",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_tool_calls{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "F",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_files_unique{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "G",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_agents_spawned{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "H",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_run_elapsed_seconds{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "I",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_judge_cost_usd{job=~\"$job\", instance=~\"$instance\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "J",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "engine_judge_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"}",
               "legendFormat": "",
-              "range": false,
               "refId": "K",
               "instant": true,
+              "range": false,
               "format": "table"
             }
           ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "transformations": [
             {
               "id": "merge",
@@ -858,7 +609,6 @@ data:
                   "__name__ 10": true,
                   "job 10": true
                 },
-                "indexByName": {},
                 "renameByName": {
                   "Value #A": "info",
                   "Value #B": "llm_cost_usd",
@@ -874,716 +624,267 @@ data:
                 }
               }
             }
-          ]
+          ],
+          "description": "Each Pushgateway group is one engine session. Values stay until that grouping key is deleted. instance is session_id when honorLabels is true."
         },
         {
+          "id": 12,
+          "type": "row",
+          "title": "Cost and tokens",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 16
-          },
-          "id": 12,
-          "panels": [],
-          "title": "Cost and tokens",
-          "type": "row"
+          }
         },
         {
+          "id": 13,
+          "type": "timeseries",
+          "title": "LLM cost by session",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Per-session gauge. The series steps up while the run is live, then stays.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 17
           },
-          "id": 13,
-          "title": "LLM cost by session",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "currencyUSD",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (instance) (engine_run_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{instance}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD"
+            },
+            "overrides": []
+          },
+          "description": "Per-session gauge. The series steps up while the run is live, then stays."
         },
         {
+          "id": 14,
+          "type": "timeseries",
+          "title": "LLM tokens by kind",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 17
           },
-          "id": 14,
-          "title": "LLM tokens by kind",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 40,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (kind) (engine_run_tokens{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{kind}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 15,
+          "type": "timeseries",
+          "title": "LLM cost by model",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 25
           },
-          "id": 15,
-          "title": "LLM cost by model",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "currencyUSD",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (model) (engine_model_cost_usd{job=~\"$job\", instance=~\"$instance\", model=~\"$model\"})",
               "legendFormat": "{{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 16,
+          "type": "timeseries",
+          "title": "LLM tokens by model",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 25
           },
-          "id": 16,
-          "title": "LLM tokens by model",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (model) (engine_model_tokens{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", kind=\"total\"})",
               "legendFormat": "{{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 17,
+          "type": "timeseries",
+          "title": "Last user-turn cost",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 33
           },
-          "id": 17,
-          "title": "Last user-turn cost",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "currencyUSD",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (instance) (engine_run_last_turn_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{instance}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 18,
+          "type": "timeseries",
+          "title": "LLM requests by model",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 33
           },
-          "id": 18,
-          "title": "LLM requests by model",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (model) (engine_model_requests{job=~\"$job\", instance=~\"$instance\", model=~\"$model\"})",
               "legendFormat": "{{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 19,
+          "type": "row",
+          "title": "Agents",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 41
-          },
-          "id": 19,
-          "panels": [],
-          "title": "Agents",
-          "type": "row"
+          }
         },
         {
+          "id": 20,
+          "type": "piechart",
+          "title": "Spawned by profile",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 0,
             "y": 42
           },
-          "id": 20,
-          "title": "Spawned by profile",
-          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (profile) (engine_agent_spawned{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
+              "legendFormat": "{{profile}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
           "options": {
-            "displayLabels": [
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "values": [
-                "value",
-                "percent"
-              ]
-            },
             "pieType": "donut",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
+              ]
             }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (profile) (engine_agent_spawned{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
-              "legendFormat": "{{profile}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
-            }
-          ]
+          }
         },
         {
+          "id": 21,
+          "type": "bargauge",
+          "title": "LLM cost by profile",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 8,
             "y": 42
           },
-          "id": 21,
-          "title": "LLM cost by profile",
-          "type": "bargauge",
+          "targets": [
+            {
+              "expr": "sum by (profile) (engine_agent_cost_usd{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
+              "legendFormat": "{{profile}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "continuous-BlPu"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "currencyUSD",
               "min": 0
             },
@@ -1591,257 +892,101 @@ data:
           },
           "options": {
             "displayMode": "lcd",
-            "maxVizHeight": 300,
-            "minVizHeight": 16,
-            "minVizWidth": 8,
-            "namePlacement": "auto",
-            "orientation": "horizontal",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showUnfilled": true,
-            "sizing": "auto",
-            "valueMode": "color"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (profile) (engine_agent_cost_usd{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
-              "legendFormat": "{{profile}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Live subagents",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 16,
             "y": 42
           },
-          "id": 22,
-          "title": "Live subagents",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum(engine_run_agents_live{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "live",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 23,
+          "type": "table",
+          "title": "Per-agent cost, tokens, duration",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "agent_id is high-cardinality; keep this as a table, not a timeseries.",
           "gridPos": {
             "h": 9,
             "w": 24,
             "x": 0,
             "y": 50
           },
-          "id": 23,
-          "title": "Per-agent cost, tokens, duration",
-          "type": "table",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "inspect": false
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "cellHeight": "sm",
-            "footer": {
-              "countRows": false,
-              "fields": "",
-              "reducer": [
-                "sum"
-              ],
-              "show": false
-            },
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "cost_usd"
-              }
-            ]
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (profile, agent_id) (engine_agent_cost_usd{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
               "legendFormat": "",
-              "range": false,
               "refId": "A",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (profile, agent_id) (engine_agent_tokens{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\", kind=\"total\"})",
               "legendFormat": "",
-              "range": false,
               "refId": "B",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (profile, agent_id) (engine_agent_requests{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
               "legendFormat": "",
-              "range": false,
               "refId": "C",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (profile, agent_id) (engine_agent_duration_seconds{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
               "legendFormat": "",
-              "range": false,
               "refId": "D",
               "instant": true,
+              "range": false,
               "format": "table"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (profile, agent_id, status) (engine_agent_finished{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
               "legendFormat": "",
-              "range": false,
               "refId": "E",
               "instant": true,
+              "range": false,
               "format": "table"
             }
           ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
           "transformations": [
             {
               "id": "merge",
@@ -1868,7 +1013,6 @@ data:
                   "__name__ 4": true,
                   "job 4": true
                 },
-                "indexByName": {},
                 "renameByName": {
                   "Value #A": "cost_usd",
                   "Value #B": "tokens",
@@ -1878,652 +1022,235 @@ data:
                 }
               }
             }
-          ]
+          ],
+          "description": "agent_id is high-cardinality; keep this as a table, not a timeseries."
         },
         {
+          "id": 24,
+          "type": "row",
+          "title": "LLM latency and errors",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 59
-          },
-          "id": 24,
-          "panels": [],
-          "title": "LLM latency and errors",
-          "type": "row"
+          }
         },
         {
+          "id": 25,
+          "type": "timeseries",
+          "title": "LLM p95 latency (live sessions)",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "rate() is only non-zero while a session is still observing new LLM calls.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 60
           },
-          "id": 25,
-          "title": "LLM p95 latency (live sessions)",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum by (le, model) (rate(engine_llm_request_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"}[$__rate_interval])))",
               "legendFormat": "p95 {{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             },
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "histogram_quantile(0.50, sum by (le, model) (rate(engine_llm_request_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"}[$__rate_interval])))",
               "legendFormat": "p50 {{model}}",
-              "range": true,
-              "refId": "B",
-              "format": "time_series"
+              "refId": "B"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "description": "rate() is only non-zero while a session is still observing new LLM calls."
         },
         {
+          "id": 26,
+          "type": "timeseries",
+          "title": "LLM average latency (session lifetime)",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "sum/count of the pushed histogram. Works for finished sessions still retained in the gateway.",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 60
           },
-          "id": 26,
-          "title": "LLM average latency (session lifetime)",
-          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum by (model) (engine_llm_request_duration_seconds_sum{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"}) / sum by (model) (engine_llm_request_duration_seconds_count{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"})",
+              "legendFormat": "{{model}}",
+              "refId": "A"
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
+              "unit": "s"
             },
             "overrides": []
           },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (model) (engine_llm_request_duration_seconds_sum{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"}) / sum by (model) (engine_llm_request_duration_seconds_count{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"})",
-              "legendFormat": "{{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
-            }
-          ]
+          "description": "sum/count of the pushed histogram. Works for finished sessions still retained in the gateway."
         },
         {
+          "id": 27,
+          "type": "timeseries",
+          "title": "LLM errors",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 68
           },
-          "id": 27,
-          "title": "LLM errors",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (model, profile) (engine_llm_errors{job=~\"$job\", instance=~\"$instance\", model=~\"$model\", profile=~\"$profile\"})",
               "legendFormat": "{{profile}} {{model}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 28,
+          "type": "timeseries",
+          "title": "Session elapsed",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 68
           },
-          "id": 28,
-          "title": "Session elapsed",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (instance) (engine_run_elapsed_seconds{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{instance}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 29,
+          "type": "row",
+          "title": "Tools, compaction, worktrees",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 76
-          },
-          "id": 29,
-          "panels": [],
-          "title": "Tools, compaction, worktrees",
-          "type": "row"
+          }
         },
         {
+          "id": 30,
+          "type": "timeseries",
+          "title": "Tool calls",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 77
           },
-          "id": 30,
-          "title": "Tool calls",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 40,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (tool, ok) (engine_tool_calls{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\", tool=~\".+\"})",
               "legendFormat": "{{tool}} ok={{ok}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 31,
+          "type": "timeseries",
+          "title": "Tool p95 duration (live)",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 77
           },
-          "id": 31,
-          "title": "Tool p95 duration (live)",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum by (le, tool) (rate(engine_tool_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"}[$__rate_interval])))",
               "legendFormat": "{{tool}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 32,
+          "type": "bargauge",
+          "title": "Tool failures",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 0,
             "y": 85
           },
-          "id": 32,
-          "title": "Tool failures",
-          "type": "bargauge",
+          "targets": [
+            {
+              "expr": "sum by (tool) (engine_tool_calls{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\", ok=\"false\"})",
+              "legendFormat": "{{tool}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "continuous-BlPu"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "min": 0
             },
@@ -2531,1197 +1258,533 @@ data:
           },
           "options": {
             "displayMode": "lcd",
-            "maxVizHeight": 300,
-            "minVizHeight": 16,
-            "minVizWidth": 8,
-            "namePlacement": "auto",
-            "orientation": "horizontal",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showUnfilled": true,
-            "sizing": "auto",
-            "valueMode": "color"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (tool) (engine_tool_calls{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\", ok=\"false\"})",
-              "legendFormat": "{{tool}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 33,
+          "type": "piechart",
+          "title": "Compactions by strategy",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 8,
             "y": 85
           },
-          "id": 33,
-          "title": "Compactions by strategy",
-          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (strategy, profile) (engine_compactions{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
+              "legendFormat": "{{profile}} {{strategy}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
           "options": {
-            "displayLabels": [
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "values": [
-                "value",
-                "percent"
-              ]
-            },
             "pieType": "donut",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
+              ]
             }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (strategy, profile) (engine_compactions{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
-              "legendFormat": "{{profile}} {{strategy}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
-            }
-          ]
+          }
         },
         {
+          "id": 34,
+          "type": "piechart",
+          "title": "Worktree settle",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 16,
             "y": 85
           },
-          "id": 34,
-          "title": "Worktree settle",
-          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (action, ok) (engine_worktrees_settled{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
+              "legendFormat": "{{action}} ok={{ok}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
           "options": {
-            "displayLabels": [
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "values": [
-                "value",
-                "percent"
-              ]
-            },
             "pieType": "donut",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
+              ]
             }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (action, ok) (engine_worktrees_settled{job=~\"$job\", instance=~\"$instance\", profile=~\"$profile\"})",
-              "legendFormat": "{{action}} ok={{ok}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
-            }
-          ]
+          }
         },
         {
+          "id": 35,
+          "type": "timeseries",
+          "title": "Session errors by kind",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 7,
             "w": 24,
             "x": 0,
             "y": 93
           },
-          "id": 35,
-          "title": "Session errors by kind",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (kind) (engine_errors{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{kind}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 36,
+          "type": "row",
+          "title": "TypeSafe System One (Jev)",
           "collapsed": false,
+          "panels": [],
           "gridPos": {
             "h": 1,
             "w": 24,
             "x": 0,
             "y": 100
-          },
-          "id": 36,
-          "panels": [],
-          "title": "TypeSafe System One (Jev)",
-          "type": "row"
+          }
         },
         {
+          "id": 37,
+          "type": "stat",
+          "title": "Judge cost",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 0,
             "y": 101
           },
-          "id": 37,
-          "title": "Judge cost",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "currencyUSD",
               "decimals": 2
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_cost_usd{job=~\"$job\", instance=~\"$instance\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 38,
+          "type": "stat",
+          "title": "Judge tokens",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 4,
             "y": 101
           },
-          "id": 38,
-          "title": "Judge tokens",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_tokens{job=~\"$job\", instance=~\"$instance\", kind=\"total\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 39,
+          "type": "stat",
+          "title": "Judge requests",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 8,
             "y": 101
           },
-          "id": 39,
-          "title": "Judge requests",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 40,
+          "type": "stat",
+          "title": "Cache hits",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 12,
             "y": 101
           },
-          "id": 40,
-          "title": "Cache hits",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\", result=\"cache\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\", result=\"cache\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 41,
+          "type": "stat",
+          "title": "Cache hit ratio",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 16,
             "y": 101
           },
-          "id": 41,
-          "title": "Cache hit ratio",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\", result=\"cache\"}) / clamp_min(sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"}), 1)",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "percentunit",
               "decimals": 2
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\", result=\"cache\"}) / clamp_min(sum(engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"}), 1)",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 42,
+          "type": "stat",
+          "title": "Decisions",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 4,
             "w": 4,
             "x": 20,
             "y": 101
           },
-          "id": 42,
-          "title": "Decisions",
-          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(engine_judge_decisions{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
+              "legendFormat": "",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "blue",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short",
               "decimals": 0
             },
             "overrides": []
           },
           "options": {
-            "colorMode": "background",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum(engine_judge_decisions{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
-              "legendFormat": "",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
+          }
         },
         {
+          "id": 43,
+          "type": "timeseries",
+          "title": "Judge requests by tag and result",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 105
           },
-          "id": 43,
-          "title": "Judge requests by tag and result",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 40,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (tag, result) (engine_judge_requests{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
               "legendFormat": "{{tag}} {{result}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 44,
+          "type": "timeseries",
+          "title": "Judge decisions by outcome",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 105
           },
-          "id": 44,
-          "title": "Judge decisions by outcome",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 40,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (tag, outcome, enforced) (engine_judge_decisions{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
               "legendFormat": "{{tag}} {{outcome}} enforced={{enforced}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 45,
+          "type": "timeseries",
+          "title": "Judge p95 latency (live, excludes cache)",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 113
           },
-          "id": 45,
-          "title": "Judge p95 latency (live, excludes cache)",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "s",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 12,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "histogram_quantile(0.95, sum by (le, tag) (rate(engine_judge_request_duration_seconds_bucket{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"}[$__rate_interval])))",
               "legendFormat": "p95 {{tag}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 46,
+          "type": "timeseries",
+          "title": "Judge tokens by kind",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
             "y": 113
           },
-          "id": 46,
-          "title": "Judge tokens by kind",
-          "type": "timeseries",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short",
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 40,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ],
-              "displayMode": "table",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
           "targets": [
             {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
               "expr": "sum by (kind) (engine_judge_tokens{job=~\"$job\", instance=~\"$instance\"})",
               "legendFormat": "{{kind}}",
-              "range": true,
-              "refId": "A",
-              "format": "time_series"
+              "refId": "A"
             }
-          ]
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          }
         },
         {
+          "id": 47,
+          "type": "piechart",
+          "title": "Judge model",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "",
           "gridPos": {
             "h": 8,
             "w": 8,
             "x": 0,
             "y": 121
           },
-          "id": 47,
-          "title": "Judge model",
-          "type": "piechart",
+          "targets": [
+            {
+              "expr": "sum by (model) (engine_judge_info{job=~\"$job\", instance=~\"$instance\", model=~\"$model\"})",
+              "legendFormat": "{{model}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "short"
             },
             "overrides": []
           },
           "options": {
-            "displayLabels": [
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "showLegend": true,
-              "values": [
-                "value",
-                "percent"
-              ]
-            },
             "pieType": "donut",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
+              ]
             }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (model) (engine_judge_info{job=~\"$job\", instance=~\"$instance\", model=~\"$model\"})",
-              "legendFormat": "{{model}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
-            }
-          ]
+          }
         },
         {
+          "id": 48,
+          "type": "bargauge",
+          "title": "Judge average latency by tag",
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_PROMETHEUS}"
           },
-          "description": "Lifetime histogram average for sessions still in the gateway.",
           "gridPos": {
             "h": 8,
             "w": 16,
             "x": 8,
             "y": 121
           },
-          "id": 48,
-          "title": "Judge average latency by tag",
-          "type": "bargauge",
+          "targets": [
+            {
+              "expr": "sum by (tag) (engine_judge_request_duration_seconds_sum{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"}) / sum by (tag) (engine_judge_request_duration_seconds_count{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
+              "legendFormat": "{{tag}}",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "continuous-BlPu"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
               "unit": "s",
               "min": 0
             },
@@ -3729,182 +1792,12 @@ data:
           },
           "options": {
             "displayMode": "lcd",
-            "maxVizHeight": 300,
-            "minVizHeight": 16,
-            "minVizWidth": 8,
-            "namePlacement": "auto",
-            "orientation": "horizontal",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showUnfilled": true,
-            "sizing": "auto",
-            "valueMode": "color"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "editorMode": "code",
-              "expr": "sum by (tag) (engine_judge_request_duration_seconds_sum{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"}) / sum by (tag) (engine_judge_request_duration_seconds_count{job=~\"$job\", instance=~\"$instance\", tag=~\"$tag\"})",
-              "legendFormat": "{{tag}}",
-              "range": false,
-              "refId": "A",
-              "instant": true,
-              "format": "time_series"
+              ]
             }
-          ]
-        }
-      ],
-      "refresh": "30s",
-      "schemaVersion": 39,
-      "tags": [
-        "engine",
-        "codeloom",
-        "pushgateway",
-        "typesafe",
-        "jev"
-      ],
-      "templating": {
-        "list": [
-          {
-            "current": {
-              "text": "Prometheus",
-              "value": "prometheus"
-            },
-            "hide": 0,
-            "includeAll": false,
-            "label": "Datasource",
-            "multi": false,
-            "name": "datasource",
-            "options": [],
-            "query": "prometheus",
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "type": "datasource"
-          },
-          {
-            "allValue": ".*",
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(engine_run_info, job)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Job",
-            "multi": true,
-            "name": "job",
-            "options": [],
-            "query": "label_values(engine_run_info, job)",
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "allValue": ".*",
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(engine_run_info{job=~\"$job\"}, instance)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Session",
-            "multi": true,
-            "name": "instance",
-            "options": [],
-            "query": "label_values(engine_run_info{job=~\"$job\"}, instance)",
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "allValue": ".*",
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(engine_model_requests{job=~\"$job\"}, model)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Model",
-            "multi": true,
-            "name": "model",
-            "options": [],
-            "query": "label_values(engine_model_requests{job=~\"$job\"}, model)",
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "allValue": ".*",
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(engine_agent_spawned{job=~\"$job\"}, profile)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Profile",
-            "multi": true,
-            "name": "profile",
-            "options": [],
-            "query": "label_values(engine_agent_spawned{job=~\"$job\"}, profile)",
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
-          },
-          {
-            "allValue": ".*",
-            "current": {},
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(engine_judge_requests{job=~\"$job\"}, tag)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Judge tag",
-            "multi": true,
-            "name": "tag",
-            "options": [],
-            "query": "label_values(engine_judge_requests{job=~\"$job\"}, tag)",
-            "refresh": 2,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "type": "query"
           }
-        ]
-      },
-      "time": {
-        "from": "now-6h",
-        "to": "now"
-      },
-      "timepicker": {},
-      "timezone": "browser",
-      "title": "Engine Run Benchmarks",
-      "uid": "engine-run-benchmarks",
-      "version": 1,
-      "weekStart": ""
+        }
+      ]
     }
