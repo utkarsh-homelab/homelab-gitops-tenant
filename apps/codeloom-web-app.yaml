@@ -40,6 +40,17 @@ spec:
       labels:
         app: codeloom-web
     spec:
+      # Pod-level: matches the "nextjs" user (uid/gid 1001) the Dockerfile's
+      # runner stage creates and switches to via USER — without this, the
+      # namespace's PodSecurity "restricted" policy warns on every rollout
+      # (runAsNonRoot / seccompProfile unset) even though the container
+      # itself never actually runs as root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: codeloom-web
           image: iresharma/codeloom-web:latest
