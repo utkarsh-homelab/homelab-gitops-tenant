@@ -104,7 +104,14 @@ spec:
               cpu: "500m"
               memory: "1Gi"
             limits:
-              cpu: "1"          # tenant LimitRange caps a single container at 1 CPU
+              cpu: "900m"       # trimmed from 1 core to free 100m of quota
+              # headroom for codeloom-web — tenant-resource-quota's
+              # limits.cpu was sitting at the hard cap (4/4) with no
+              # slack anywhere else in the namespace when that app was
+              # added. Raise this back toward 1 CPU if Crafty is ever
+              # actually CPU-throttled (check `kubectl top pod` for
+              # crafty-controller under load) and free room elsewhere
+              # instead.
               # Crafty runs the Java Minecraft process *inside this same
               # container*, alongside its own Python panel. Whatever Java
               # heap ("Max Memory") you set for a server in Crafty needs

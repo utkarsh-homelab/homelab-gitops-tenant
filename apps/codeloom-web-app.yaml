@@ -1,0 +1,125 @@
+# codeloom-web: the CodeLoom marketing/docs site (engine, cloud controller,
+# clients — one Next.js app, routed by section).
+# Source: workspace/pages in https://github.com/iresharma/codeloom (not yet
+# pushed publicly at time of writing).
+#
+# Images are built and pushed manually for now (no CI automation), same as
+# tracer — bump the `image:` tag below by hand when you cut a new build:
+#
+#   cd workspace/pages
+#   docker build -f apps/web/Dockerfile -t iresharma/codeloom-web:latest .
+#   docker push iresharma/codeloom-web:latest
+#   kubectl -n iresharma rollout restart deployment codeloom-web
+#
+# strategy.type is Recreate, not the apps/v1 default RollingUpdate:
+# tenant-resource-quota's limits.cpu was already sitting at the hard cap
+# (4/4) with zero headroom anywhere in the namespace before this app was
+# added — crafty-controller's limit was trimmed 1000m -> 900m in this same
+# repo to free exactly the 100m this app's container needs. RollingUpdate's
+# default 25% max surge would try to schedule a second pod's cpu limit
+# briefly during every rollout, which this namespace can never grant.
+# Recreate tears down the old pod before creating the new one, so only one
+# pod's worth of quota is ever requested at a time — the same fix pr-agent
+# and tracer-collector already use here, for their own respective reasons.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codeloom-web
+  namespace: iresharma
+  labels:
+    app: codeloom-web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: codeloom-web
+  template:
+    metadata:
+      labels:
+        app: codeloom-web
+    spec:
+      containers:
+        - name: codeloom-web
+          image: iresharma/codeloom-web:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              # The only 100m of limits.cpu headroom this namespace has —
+              # see the strategy.type note above. Static content on Next.js
+              # standalone output is light enough that this has not been
+              # observed to throttle in practice; if it ever does, free
+              # more room elsewhere in this repo before raising it.
+              cpu: 100m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            # readOnlyRootFilesystem above needs somewhere writable for
+            # Next.js's standalone server cache dir.
+            - name: next-cache
+              mountPath: /app/apps/web/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: codeloom-web
+  namespace: iresharma
+spec:
+  type: ClusterIP
+  selector:
+    app: codeloom-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codeloom-web
+  namespace: iresharma
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-iresh
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: codeloom.iresharma.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: codeloom-web
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - codeloom.iresharma.com
+      secretName: codeloom-web-iresharma-tls
