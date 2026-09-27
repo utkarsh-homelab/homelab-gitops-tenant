@@ -19,8 +19,7 @@
 # default 25% max surge would try to schedule a second pod's cpu limit
 # briefly during every rollout, which this namespace can never grant.
 # Recreate tears down the old pod before creating the new one, so only one
-# pod's worth of quota is ever requested at a time — the same fix pr-agent
-# and tracer-collector already use here, for their own respective reasons.
+# pod's worth of quota is ever requested at a time.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
